@@ -8,12 +8,13 @@ import Analytics from './pages/Analytics'
 import Goals from './pages/Goals'
 import Invest from './pages/Invest'
 import Security from './pages/Security'
+import Onboarding from './pages/Onboarding'
 import Transactions from './pages/Transactions'
 import Login from './pages/Login'
 import { useEffect, useRef } from 'react'
 
 function AppContent() {
-  const { user, loading, logout } = useAuth()
+  const { user, userProfile, loading, logout } = useAuth()
   const timerRef = useRef(null)
 
   // 🛡️ ZERO-TRUST INACTIVITY PROTECTION (15 MIN)
@@ -54,6 +55,18 @@ function AppContent() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Router>
+    )
+  }
+
+  // 🛡️ ONBOARDING GUARD: FORCE HOUSEHOLD ID CREATION
+  if (user && !userProfile?.householdId) {
+    return (
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Routes>
+          <Route path="/onboarding" element={<Onboarding />} />
+          <Route path="*" element={<Navigate to="/onboarding" replace />} />
         </Routes>
       </Router>
     )

@@ -111,8 +111,8 @@ export function AppProvider({ children }) {
         const data = snapshot.data()
         setBudgets(prev => ({ ...prev, [currentMonth]: data }))
       } else {
-        // Init budget for new month
-        setDoc(bRef, defaultBudget)
+        // Init budget for new month with householdId scoping
+        setDoc(bRef, { ...defaultBudget, householdId })
       }
     })
     return () => unsubscribe()
@@ -133,7 +133,7 @@ export function AppProvider({ children }) {
     if (!householdId || !db || isSyncing.current) return
     const bId = `${householdId}_${currentMonth}`
     const timeout = setTimeout(() => {
-      setDoc(doc(db, 'budgets', bId), budget)
+      setDoc(doc(db, 'budgets', bId), { ...budget, householdId })
     }, 1000)
     return () => clearTimeout(timeout)
   }, [budget, householdId, currentMonth])

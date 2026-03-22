@@ -2,41 +2,33 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // 🛡️ SECURITY LAYER 1: IDENTITY & PROFILE (USER-SPECIFIC)
+    // 🛡️ USER PROFILE (PRIVATE)
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // 🛡️ SECURITY LAYER 2: HOUSEHOLD DATA (SHARED BUT RESTRICTED)
+    // 🛡️ HOUSEHOLD DATA (MEMBER-ONLY)
     match /households/{householdId} {
-      // Allow read if user is a member
       allow read: if request.auth != null && 
-        request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.members;
+        request.auth.uid in resource.data.members;
       
-      // Allow creation if user exists
       allow create: if request.auth != null;
       
-      // Allow update ONLY if user is a member and not modifying members maliciously
       allow update: if request.auth != null && 
-        request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.members;
+        (request.auth.uid in resource.data.members || 
+         request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.members);
     }
 
-    // 🛡️ SECURITY LAYER 3: BUDGET & FINANCIAL DATA (ZERO-TRUST AUTHORIZATION)
-    // Budget IDs are structured as {householdId}_{YYYY-MM}
-    match /budgets/{budgetId} {
-      function getHouseholdId(id) {
-        return id.split('_')[0];
-      }
-      
+    // 🛡️ SHARED SCOPED DATA (BUDGETS, TRANSACTIONS, GOALS)
+    // Every document in these collections MUST have a 'householdId' field
+    match /{collection}/{docId} {
       allow read, write: if request.auth != null && 
-        request.auth.uid in get(/databases/$(database)/documents/households/getHouseholdId(budgetId)).data.members;
-    }
-
-    // Audit logs are read-only for users (append-only)
-    match /auditLogs/{logId} {
-       allow create: if request.auth != null;
-       allow read: if request.auth != null && 
-         resource.data.userId == request.auth.uid;
+        exists(/databases/$(database)/documents/households/$(resource.data.householdId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members;
+        
+      // Allow creation if the linked household allows it
+      allow create: if request.auth != null && 
+        request.auth.uid in get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members;
     }
   }
 }
