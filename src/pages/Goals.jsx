@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '../context/AppContext'
 
@@ -13,290 +13,231 @@ function pct(current, target) {
   return Math.min(100, Math.round((current / target) * 100))
 }
 
-function GoalCard({ goal, onUpdate, onRemove }) {
+function GoalCheckpoint({ goal, onUpdate, onRemove, status }) {
   const [editing, setEditing] = useState(false)
   const progress = pct(goal.current, goal.target)
 
+  const getStatusIcon = () => {
+    if (progress >= 100) return 'check_circle'
+    if (status === 'locked') return 'lock'
+    return 'pending'
+  }
+
+  const getStatusColor = () => {
+    if (progress >= 100) return 'text-success'
+    if (status === 'locked') return 'text-gray-600'
+    return 'text-primary'
+  }
+
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className={`bg-surface border rounded-2xl p-4 ${goal.isUltimate ? 'border-amber-400/40' : goal.isImmediate ? 'border-primary/40' : 'border-outline-variant'}`}
-    >
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex-1 min-w-0">
-          {!goal.isUltimate && !goal.isImmediate && (
-            <span className="inline-block text-[9px] font-body font-bold text-success tracking-wider uppercase mb-1 bg-success/10 px-2 py-0.5 rounded-full">
-              {goal.phase}
-            </span>
-          )}
-          {goal.isImmediate && (
-            <span className="inline-block text-[9px] font-body font-bold text-primary tracking-wider uppercase mb-1 bg-primary/10 px-2 py-0.5 rounded-full">
-              Next Immediate Goal
-            </span>
-          )}
-          {goal.isUltimate && (
-            <span className="inline-block text-[9px] font-body font-bold text-amber-400 tracking-wider uppercase mb-1 bg-amber-400/10 px-2 py-0.5 rounded-full">
-              The End in Mind
-            </span>
-          )}
-          <h3 className="font-headline font-bold text-on-surface text-base">{goal.name}</h3>
-          {goal.description && (
-            <p className="text-gray-500 text-[11px] font-body mt-0.5 line-clamp-2">{goal.description}</p>
-          )}
+    <div className={`min-w-[280px] snap-center p-1`}>
+      <motion.div
+        layout
+        className={`bg-surface border rounded-3xl p-5 h-full flex flex-col justify-between ${
+          status === 'locked' ? 'opacity-60 grayscale' : 'shadow-lg shadow-black/5'
+        } ${progress >= 100 ? 'border-success/40' : 'border-outline-variant'}`}
+      >
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <span className={`material-symbols-outlined ${getStatusColor()}`}>{getStatusIcon()}</span>
+            <div className="flex gap-2">
+              <button onClick={() => setEditing(!editing)} className="text-gray-500 hover:text-primary transition-colors">
+                <span className="material-symbols-outlined text-sm">edit</span>
+              </button>
+              {!goal.isUltimate && (
+                <button onClick={() => onRemove(goal.id)} className="text-gray-500 hover:text-error transition-colors">
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                </button>
+              )}
+            </div>
+          </div>
+          
+          <h3 className="font-headline font-bold text-on-surface text-base mb-1">{goal.name}</h3>
+          <p className="text-gray-600 text-[11px] font-body line-clamp-3 mb-4">{goal.description}</p>
         </div>
-        <div className="flex gap-1 flex-shrink-0">
-          <button
-            onClick={() => setEditing(!editing)}
-            className="text-gray-600 hover:text-primary transition-colors"
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>edit</span>
-          </button>
-          {!goal.isUltimate && (
-            <button onClick={() => onRemove(goal.id)} className="text-gray-600 hover:text-error transition-colors">
-              <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>delete</span>
-            </button>
-          )}
-        </div>
-      </div>
 
-      {/* Progress */}
-      <div className="mb-3">
-        <div className="flex justify-between items-center mb-1.5">
-          <span className="text-xs font-body text-gray-500">
-            {fmt(goal.current)} / {fmt(goal.target)}
-          </span>
-          <span className={`text-xs font-body font-bold ${progress >= 100 ? 'text-success' : progress >= 50 ? 'text-primary' : 'text-gray-400'}`}>
-            {progress}%
-          </span>
+        <div>
+          <div className="flex justify-between items-end mb-1.5">
+            <div className="text-[10px] font-body text-gray-400 uppercase tracking-widest">Progress</div>
+            <div className={`text-xs font-headline font-bold ${progress >= 100 ? 'text-success' : 'text-primary'}`}>{progress}%</div>
+          </div>
+          <div className="h-1.5 bg-surface-container-high rounded-full overflow-hidden mb-3">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progress}%` }}
+              className={`h-full rounded-full ${progress >= 100 ? 'bg-success' : 'bg-primary'}`}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-body text-on-surface font-semibold">{fmt(goal.current)}</span>
+            <span className="text-[10px] font-body text-gray-500">Target: {fmt(goal.target)}</span>
+          </div>
         </div>
-        <div className="h-2 bg-surface-container-high rounded-full overflow-hidden">
-          <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.8, ease: 'easeOut' }}
-            className={`h-full rounded-full ${
-              goal.isUltimate ? 'bg-amber-400' :
-              goal.isImmediate ? 'bg-primary' :
-              progress >= 100 ? 'bg-success' : 'bg-secondary'
-            }`}
-          />
-        </div>
-      </div>
 
-      {/* Edit Mode */}
-      <AnimatePresence>
-        {editing && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="border-t border-outline-variant pt-3 space-y-2">
+        <AnimatePresence>
+          {editing && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="mt-4 border-t border-outline-variant pt-4 space-y-3"
+            >
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[9px] font-body text-gray-500 uppercase tracking-wider">Current Amount</label>
+                  <label className="text-[9px] font-body text-gray-500 uppercase">Current</label>
                   <input
                     type="number"
                     value={goal.current}
                     onChange={e => onUpdate(goal.id, 'current', e.target.value)}
-                    className="w-full bg-surface-container border border-outline-variant rounded-xl px-3 py-2 text-xs font-body text-on-surface outline-none focus:border-primary transition-colors mt-1"
+                    className="w-full bg-surface-container border border-outline-variant rounded-xl px-2 py-1.5 text-xs font-body text-on-surface outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[9px] font-body text-gray-500 uppercase tracking-wider">Target Amount</label>
+                  <label className="text-[9px] font-body text-gray-500 uppercase">Target</label>
                   <input
                     type="number"
                     value={goal.target}
                     onChange={e => onUpdate(goal.id, 'target', e.target.value)}
-                    className="w-full bg-surface-container border border-outline-variant rounded-xl px-3 py-2 text-xs font-body text-on-surface outline-none focus:border-primary transition-colors mt-1"
+                    className="w-full bg-surface-container border border-outline-variant rounded-xl px-2 py-1.5 text-xs font-body text-on-surface outline-none"
                   />
                 </div>
               </div>
-              <div>
-                <label className="text-[9px] font-body text-gray-500 uppercase tracking-wider">Goal Name</label>
-                <input
-                  type="text"
-                  value={goal.name}
-                  onChange={e => onUpdate(goal.id, 'name', e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded-xl px-3 py-2 text-xs font-body text-on-surface outline-none focus:border-primary transition-colors mt-1"
-                />
-              </div>
-              <div>
-                <label className="text-[9px] font-body text-gray-500 uppercase tracking-wider">Target Date</label>
-                <input
-                  type="date"
-                  value={goal.deadline}
-                  onChange={e => onUpdate(goal.id, 'deadline', e.target.value)}
-                  className="w-full bg-surface-container border border-outline-variant rounded-xl px-3 py-2 text-xs font-body text-on-surface outline-none focus:border-primary transition-colors mt-1"
-                />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {goal.deadline && (
-        <div className="flex items-center gap-1 mt-2">
-          <span className="material-symbols-outlined text-gray-600" style={{ fontSize: '12px' }}>calendar_today</span>
-          <span className="text-[10px] font-body text-gray-600">
-            Target: {new Date(goal.deadline).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-          </span>
-        </div>
-      )}
-    </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    </div>
   )
 }
 
 export default function Goals() {
   const { goals, updateGoal, addGoal, removeGoal, netWorth } = useApp()
   const [showAddModal, setShowAddModal] = useState(false)
-  const [newGoal, setNewGoal] = useState({ name: '', target: '', current: '', deadline: '', phase: 'Custom', description: '' })
+  const [newGoal, setNewGoal] = useState({ name: '', target: '', current: '', deadline: '', phase: '🟢 PHASE 1: FINANCIAL STABILITY', description: '' })
+  
+  const timelineRef = useRef(null)
 
-  const grouped = goals.reduce((acc, g) => {
-    const key = g.phase || 'Other'
-    if (!acc[key]) acc[key] = []
-    acc[key].push(g)
-    return acc
-  }, {})
+  const phases = useMemo(() => {
+    const grouped = goals.reduce((acc, g) => {
+      const key = g.phase || 'Custom'
+      if (!acc[key]) acc[key] = { name: key, goals: [], progress: 0 }
+      acc[key].goals.push(g)
+      return acc
+    }, {})
+
+    return Object.values(grouped).map(p => {
+      const totalProgress = p.goals.reduce((sum, g) => sum + pct(g.current, g.target), 0)
+      p.progress = Math.round(totalProgress / p.goals.length)
+      return p
+    }).sort((a,b) => a.name.localeCompare(b.name))
+  }, [goals])
+
+  const wealthScore = useMemo(() => {
+    const totalGoals = goals.filter(g => !g.isUltimate)
+    if (totalGoals.length === 0) return 0
+    const overallProgress = totalGoals.reduce((sum, g) => sum + pct(g.current, g.target), 0)
+    return Math.round(overallProgress / totalGoals.length)
+  }, [goals])
 
   const handleAdd = () => {
     if (!newGoal.name || !newGoal.target) return
     addGoal({ ...newGoal, target: Number(newGoal.target), current: Number(newGoal.current) || 0 })
-    setNewGoal({ name: '', target: '', current: '', deadline: '', phase: 'Custom', description: '' })
     setShowAddModal(false)
   }
 
-  const totalGoalsValue = goals.filter(g => !g.isUltimate).reduce((s, g) => s + g.target, 0)
-  const totalGoalsProgress = goals.filter(g => !g.isUltimate).reduce((s, g) => s + g.current, 0)
-  const goalsComplete = goals.filter(g => !g.isUltimate && g.current >= g.target).length
-
   return (
-    <div className="bg-background min-h-screen px-4 pt-5 pb-4">
-      <div className="flex items-center justify-between mb-5">
+    <div className="bg-background min-h-screen px-4 pt-6 pb-24 overflow-x-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="font-headline font-bold text-on-surface text-2xl">Wealth Goals</h1>
-          <p className="text-gray-500 text-xs font-body mt-1">{goalsComplete} of {goals.filter(g => !g.isUltimate).length} goals complete</p>
+          <h1 className="font-headline font-bold text-on-surface text-3xl">Wealth Plan</h1>
+          <p className="text-gray-500 text-xs font-body mt-1">Journey to $20,000,000 Net Worth</p>
         </div>
+        <div className="text-right">
+          <p className="font-headline font-bold text-primary text-3xl">{wealthScore}%</p>
+          <p className="text-[9px] font-body text-gray-500 uppercase tracking-widest font-bold">Plan Score</p>
+        </div>
+      </div>
+
+      {/* Main Roadmap */}
+      <div className="space-y-12">
+        {phases.map((phase, pIndex) => {
+          const prevPhaseComplete = pIndex === 0 || phases[pIndex-1].progress >= 100
+          
+          return (
+            <div key={phase.name} className="relative">
+              {/* Phase Header */}
+              <div className="flex items-center justify-between mb-4 px-1">
+                <div>
+                  <h2 className="font-headline font-semibold text-on-surface text-sm uppercase tracking-wider">{phase.name}</h2>
+                  <p className="text-[10px] font-body text-gray-500 mt-0.5">
+                    {phase.progress >= 100 ? '✅ PHASE COMPLETE' : phase.progress > 0 ? '🚀 IN PROGRESS' : '🔒 LOCKED'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className={`text-xs font-headline font-bold ${phase.progress >= 100 ? 'text-success' : 'text-primary'}`}>
+                    {phase.progress}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Horizontal Scrollable Goals */}
+              <div 
+                className="flex overflow-x-auto gap-4 pb-4 px-1 snap-x no-scrollbar"
+                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+              >
+                {phase.goals.sort((a,b) => a.id.localeCompare(b.id)).map((goal, gIndex) => {
+                  const isLocked = !prevPhaseComplete && phase.progress === 0
+                  return (
+                    <GoalCheckpoint 
+                      key={goal.id} 
+                      goal={goal} 
+                      onUpdate={updateGoal} 
+                      onRemove={removeGoal}
+                      status={isLocked ? 'locked' : 'available'}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Floating Action Bar */}
+      <div className="fixed bottom-24 right-4 z-40">
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1.5 bg-primary text-background rounded-xl px-3 py-2 text-xs font-body font-bold hover:bg-primary/90 transition-colors"
+          className="w-14 h-14 rounded-full bg-primary text-background flex items-center justify-center shadow-xl shadow-primary/30 active:scale-95 transition-transform"
         >
-          <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add</span>
-          Add Goal
+          <span className="material-symbols-outlined text-2xl">add</span>
         </button>
       </div>
 
-      {/* Progress Overview */}
-      <div className="bg-surface border border-outline-variant rounded-2xl p-4 mb-5">
-        <div className="grid grid-cols-3 gap-3 text-center mb-3">
-          <div>
-            <p className="font-headline font-bold text-on-surface text-base">{goalsComplete}</p>
-            <p className="text-gray-500 text-[9px] font-body uppercase tracking-wider">Complete</p>
-          </div>
-          <div>
-            <p className="font-headline font-bold text-primary text-base">{goals.filter(g => !g.isUltimate && g.current < g.target).length}</p>
-            <p className="text-gray-500 text-[9px] font-body uppercase tracking-wider">In Progress</p>
-          </div>
-          <div>
-            <p className="font-headline font-bold text-on-surface text-base">${(netWorth / 1000).toFixed(0)}K</p>
-            <p className="text-gray-500 text-[9px] font-body uppercase tracking-wider">Net Worth</p>
-          </div>
-        </div>
-        <div className="h-2 bg-surface-container-high rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary rounded-full transition-all"
-            style={{ width: `${totalGoalsValue > 0 ? Math.min(100, (totalGoalsProgress / totalGoalsValue) * 100) : 0}%` }}
-          />
-        </div>
-      </div>
-
-      {/* Goals by Phase */}
-      <div className="space-y-5">
-        {Object.entries(grouped).map(([phase, phaseGoals]) => (
-          <div key={phase}>
-            <p className="text-[9px] font-body font-bold uppercase tracking-widest text-gray-600 mb-3 px-1">{phase}</p>
-            <div className="space-y-3">
-              <AnimatePresence>
-                {phaseGoals.map(goal => (
-                  <GoalCard key={goal.id} goal={goal} onUpdate={updateGoal} onRemove={removeGoal} />
-                ))}
-              </AnimatePresence>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Add Goal Modal */}
+      {/* Add Modal */}
       <AnimatePresence>
         {showAddModal && (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-50"
-              onClick={() => setShowAddModal(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 50 }}
-              className="fixed inset-x-4 bottom-24 bg-surface border border-outline-variant rounded-3xl p-6 z-50 shadow-2xl"
-            >
-              <h2 className="font-headline font-bold text-on-surface text-lg mb-4">New Goal</h2>
-              <div className="space-y-3">
-                <input
-                  placeholder="Goal name (e.g. Buy a Car)"
-                  value={newGoal.name}
-                  onChange={e => setNewGoal(p => ({ ...p, name: e.target.value }))}
-                  className="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-body text-on-surface placeholder-gray-600 outline-none focus:border-primary transition-colors"
-                />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] bg-surface border border-outline-variant rounded-3xl p-6 z-50 shadow-2xl overflow-hidden">
+              <h2 className="font-headline font-bold text-on-surface text-xl mb-6">Create Custom Goal</h2>
+              <div className="space-y-4">
+                <input placeholder="Goal name" className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.name} onChange={e => setNewGoal(p => ({ ...p, name: e.target.value }))} />
                 <div className="grid grid-cols-2 gap-3">
-                  <input
-                    type="number"
-                    placeholder="Target ($)"
-                    value={newGoal.target}
-                    onChange={e => setNewGoal(p => ({ ...p, target: e.target.value }))}
-                    className="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-body text-on-surface placeholder-gray-600 outline-none focus:border-primary transition-colors"
-                  />
-                  <input
-                    type="number"
-                    placeholder="Current ($)"
-                    value={newGoal.current}
-                    onChange={e => setNewGoal(p => ({ ...p, current: e.target.value }))}
-                    className="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-body text-on-surface placeholder-gray-600 outline-none focus:border-primary transition-colors"
-                  />
+                  <input type="number" placeholder="Target ($)" className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.target} onChange={e => setNewGoal(p => ({ ...p, target: e.target.value }))} />
+                  <input type="number" placeholder="Current ($)" className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.current} onChange={e => setNewGoal(p => ({ ...p, current: e.target.value }))} />
                 </div>
-                <input
-                  type="date"
-                  value={newGoal.deadline}
-                  onChange={e => setNewGoal(p => ({ ...p, deadline: e.target.value }))}
-                  className="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-body text-on-surface outline-none focus:border-primary transition-colors"
-                />
-                <input
-                  placeholder="Description (optional)"
-                  value={newGoal.description}
-                  onChange={e => setNewGoal(p => ({ ...p, description: e.target.value }))}
-                  className="w-full bg-surface-container border border-outline-variant rounded-xl px-4 py-2.5 text-sm font-body text-on-surface placeholder-gray-600 outline-none focus:border-primary transition-colors"
-                />
+                <select className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm text-on-surface appearance-none" value={newGoal.phase} onChange={e => setNewGoal(p => ({ ...p, phase: e.target.value }))}>
+                  <option>🟢 PHASE 1: FINANCIAL STABILITY</option>
+                  <option>🔵 PHASE 2: WEALTH BUILDING</option>
+                  <option>🟣 PHASE 3: FAMILY + ASSETS</option>
+                  <option>🔴 PHASE 5: FINANCIAL FREEDOM</option>
+                </select>
+                <textarea placeholder="Description" rows={3} className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.description} onChange={e => setNewGoal(p => ({ ...p, description: e.target.value }))} />
               </div>
-              <div className="flex gap-3 mt-5">
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-outline-variant text-gray-400 text-sm font-body"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAdd}
-                  className="flex-1 py-2.5 rounded-xl bg-primary text-background text-sm font-body font-bold"
-                >
-                  Add Goal
-                </button>
+              <div className="flex gap-3 mt-8">
+                <button onClick={() => setShowAddModal(false)} className="flex-1 py-3 text-gray-500 font-bold">Cancel</button>
+                <button onClick={handleAdd} className="flex-1 py-3 bg-primary text-background rounded-2xl font-bold">Create Goal</button>
               </div>
             </motion.div>
           </>

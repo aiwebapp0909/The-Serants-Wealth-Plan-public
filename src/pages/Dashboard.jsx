@@ -23,7 +23,7 @@ export default function Dashboard() {
     netWorth, totalAssets, totalLiabilities,
     totalIncome, totalExpenses, totalPlannedIncome, totalPlannedExpenses,
     nextImmediateGoal, nextGoal, ultimateGoal,
-    budget, healthScore
+    budget, healthScore, goals
   } = useApp()
   const { userProfile, user, logout } = useAuth()
   const { insight, loading: aiLoading, generateInsight } = useAI()
@@ -32,6 +32,16 @@ export default function Dashboard() {
 
   const savings = totalIncome - totalExpenses
   const savingsRate = totalIncome > 0 ? Math.round((savings / totalIncome) * 100) : 0
+  
+  const wealthScore = useMemo(() => {
+    const totalGoals = goals.filter(g => !g.isUltimate)
+    if (totalGoals.length === 0) return 0
+    const overallProgress = totalGoals.reduce((sum, g) => {
+      const p = g.target === 0 ? 0 : Math.min(100, (g.current / g.target) * 100)
+      return sum + p
+    }, 0)
+    return Math.round(overallProgress / totalGoals.length)
+  }, [goals])
 
   useEffect(() => {
     if (userProfile && !insight && !aiLoading) {
@@ -175,7 +185,30 @@ export default function Dashboard() {
       <SyncModal />
 
       <div className="px-4 space-y-3 pb-4">
-        {/* Row 1: Goals */}
+        {/* Row 1: Wealth Score Hero */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-surface border border-outline-variant rounded-3xl p-6 relative overflow-hidden"
+        >
+          <div className="absolute top-0 right-0 p-6 opacity-10">
+            <span className="material-symbols-outlined text-7xl">auto_graph</span>
+          </div>
+          <p className="text-[10px] font-body font-bold text-gray-500 uppercase tracking-widest mb-1">Wealth Score</p>
+          <div className="flex items-end gap-2 mb-4">
+            <h2 className="font-headline font-bold text-on-surface text-5xl leading-none">{wealthScore}%</h2>
+            <p className="text-gray-500 text-xs font-body mb-1 uppercase tracking-tight">to Financial Freedom</p>
+          </div>
+          <div className="h-2 bg-surface-container-high rounded-full overflow-hidden">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${wealthScore}%` }}
+              className="h-full bg-gradient-to-r from-primary to-accent rounded-full"
+            />
+          </div>
+        </motion.div>
+
+        {/* Row 2: Stats Grid */}
         <div className="grid grid-cols-2 gap-3">
           {/* Next Immediate Goal */}
           <Link to="/goals">

@@ -36,9 +36,23 @@ const defaultNetWorth = {
   history: [],
 }
 const defaultGoals = [
-  { id: '1', name: 'Dream Vacation', target: 5000, current: 0, deadline: '2026-12-31', phase: 'Immediate', isImmediate: true, description: 'Save for your dream vacation together.' },
-  { id: '2', name: 'Starter Emergency Fund', target: 1000, current: 0, deadline: '2026-12-31', phase: 'Phase 1: Financial Stability', description: 'Save initial $1,000 cash buffer to handle unexpected expenses without debt.' },
-  { id: '8', name: '$20M Net Worth', target: 20000000, current: 0, deadline: '2066-12-31', phase: 'Ultimate Goal', isUltimate: true, description: 'The ultimate destination of the Serants Wealth Plan.' },
+  // PHASE 1: FINANCIAL STABILITY
+  { id: '1', name: 'Starter Emergency Fund', target: 1000, current: 0, deadline: '2026-12-31', phase: '🟢 PHASE 1: FINANCIAL STABILITY', isImmediate: true, description: 'Initial $1,000 cash buffer for unexpected expenses.' },
+  { id: '2', name: 'Debt Elimination', target: 5000, current: 0, deadline: '2027-06-30', phase: '🟢 PHASE 1: FINANCIAL STABILITY', description: 'Pay off all non-mortgage debt using the snowball method.' },
+  { id: '3', name: 'Fully Funded Emergency Fund', target: 30000, current: 0, deadline: '2027-12-31', phase: '🟢 PHASE 1: FINANCIAL STABILITY', description: '3–6 months of living expenses saved in a HYSA.' },
+  { id: '4', name: 'Protection System', target: 1, current: 0, deadline: '2027-12-31', phase: '🟢 PHASE 1: FINANCIAL STABILITY', description: 'Life, Health, Disability insurance and ID theft protection.' },
+  
+  // PHASE 2: WEALTH BUILDING
+  { id: '5', name: 'Consistent Investing', target: 30000, current: 0, deadline: '2028-12-31', phase: '🔵 PHASE 2: WEALTH BUILDING', description: 'Invest 15%+ of household income (min. $2,500/mo).' },
+  { id: '6', name: 'Lifestyle + Flexibility Funds', target: 10000, current: 0, deadline: '2028-12-31', phase: '🔵 PHASE 2: WEALTH BUILDING', description: 'Life buckets: Vacation, Fun experiences, Large purchases.' },
+  
+  // PHASE 3: FAMILY + ASSET BUILDING
+  { id: '7', name: 'Home Ownership', target: 60000, current: 0, deadline: '2033-12-31', phase: '🟣 PHASE 3: FAMILY + ASSETS', description: 'Buy a house and begin mortgage payoff strategy.' },
+  { id: '8', name: 'Children Wealth System', target: 100000, current: 0, deadline: '2033-12-31', phase: '🟣 PHASE 3: FAMILY + ASSETS', description: 'Start investment accounts for each child.' },
+  { id: '9', name: 'Legal & Protection Setup', target: 1, current: 0, deadline: '2033-12-31', phase: '🟣 PHASE 3: FAMILY + ASSETS', description: 'Will, Trust, and Estate planning.' },
+  
+  // PHASE 5: FINANCIAL FREEDOM
+  { id: '10', name: '$20M Net Worth', target: 20000000, current: 0, deadline: '2066-12-31', phase: '🔴 PHASE 5: FINANCIAL FREEDOM', isUltimate: true, description: 'The ultimate destination of the Serants Wealth Plan.' },
 ]
 
 export function AppProvider({ children }) {
