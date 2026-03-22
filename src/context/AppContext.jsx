@@ -55,41 +55,43 @@ const defaultGoals = [
   { id: '10', name: '$20M Net Worth', target: 20000000, current: 0, deadline: '2066-12-31', phase: '🔴 PHASE 5: FINANCIAL FREEDOM', isUltimate: true, description: 'The ultimate destination of the Serants Wealth Plan.' },
 ]
 
+const getMonthKey = (date = new Date()) => {
+  const d = new Date(date)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
 export function AppProvider({ children }) {
   const { userProfile } = useAuth()
   const groupId = userProfile?.groupId
 
   const [settings, setSettings] = useLocalStorage('swp_settings', defaultSettings)
-  const [budget, setBudget] = useLocalStorage('swp_budget', defaultBudget)
+  const [budgets, setBudgets] = useLocalStorage('swp_budgets', { [getMonthKey()]: defaultBudget })
+  const [currentMonth, setCurrentMonth] = useState(getMonthKey())
   const [netWorthData, setNetWorthData] = useLocalStorage('swp_networth', defaultNetWorth)
   const [goals, setGoals] = useLocalStorage('swp_goals', defaultGoals)
   const [transactions, setTransactions] = useLocalStorage('swp_transactions', [])
   
+  const budget = budgets[currentMonth] || defaultBudget
   const isSyncing = useRef(false)
 
   // Sync with Firestore if groupId exists
   useEffect(() => {
     if (!groupId || !db) return
-
     const docRef = doc(db, 'groups', groupId)
-    
-    // Initial fetch or listen
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data()
         isSyncing.current = true
         if (data.settings) setSettings(data.settings)
-        if (data.budget) setBudget(data.budget)
+        if (data.budgets) setBudgets(data.budgets)
         if (data.netWorthData) setNetWorthData(data.netWorthData)
         if (data.goals) setGoals(data.goals)
         if (data.transactions) setTransactions(data.transactions)
         setTimeout(() => { isSyncing.current = false }, 100)
       } else {
-        // Create initial group data
-        setDoc(docRef, { settings, budget, netWorthData, goals, transactions })
+        setDoc(docRef, { settings, budgets, netWorthData, goals, transactions })
       }
     })
-
     return () => unsubscribe()
   }, [groupId])
 
@@ -98,67 +100,103 @@ export function AppProvider({ children }) {
     if (!groupId || !db || isSyncing.current) return
     const docRef = doc(db, 'groups', groupId)
     const timeout = setTimeout(() => {
-      setDoc(docRef, { settings, budget, netWorthData, goals, transactions }, { merge: true })
+      setDoc(docRef, { settings, budgets, netWorthData, goals, transactions }, { merge: true })
     }, 1000)
     return () => clearTimeout(timeout)
-  }, [settings, budget, netWorthData, goals, transactions, groupId])
+  }, [settings, budgets, netWorthData, goals, transactions, groupId])
 
-  const totalIncome = useMemo(() => budget.income.reduce((s, i) => s + Number(i.actual || 0), 0), [budget.income])
+  // ZERO-BASED CALCULATIONS
+  const totalIncome = useMemo(() => budget.income.reduce((s, i) => s + Number(i.actual || 0), 0), [budget])
   const totalExpenses = useMemo(() =>
-    ['fixedBills', 'food', 'savings', 'investing', 'funMoney'].reduce((sum, section) =>
-      sum + (budget[section] || []).reduce((s, i) => s + Number(i.actual || 0), 0), 0
+    ['fixedBills', 'food', 'funMoney'].reduce((sum, section) =>
+      sum + (budget[section] || []).reduce((s, i) => s + Math.abs(Number(i.actual || 0)), 0), 0
     ), [budget])
 
-  const totalPlannedIncome = useMemo(() => budget.income.reduce((s, i) => s + Number(i.planned || 0), 0), [budget.income])
+  const totalSavings = useMemo(() => (budget.savings || []).reduce((s, i) => s + Number(i.actual || 0), 0), [budget])
+  const totalInvesting = useMemo(() => (budget.investing || []).reduce((s, i) => s + Number(i.actual || 0), 0), [budget])
+
+  const totalPlannedIncome = useMemo(() => budget.income.reduce((s, i) => s + Number(i.planned || 0), 0), [budget])
   const totalPlannedExpenses = useMemo(() =>
-    ['fixedBills', 'food', 'savings', 'investing', 'funMoney'].reduce((sum, section) =>
-      sum + (budget[section] || []).reduce((s, i) => s + Number(i.planned || 0), 0), 0
+    ['fixedBills', 'food', 'funMoney'].reduce((sum, section) =>
+      sum + (budget[section] || []).reduce((s, i) => s + Math.abs(Number(i.planned || 0)), 0), 0
     ), [budget])
+  const totalPlannedSavings = useMemo(() => (budget.savings || []).reduce((s, i) => s + Number(i.planned || 0), 0), [budget])
+  const totalPlannedInvesting = useMemo(() => (budget.investing || []).reduce((s, i) => s + Number(i.planned || 0), 0), [budget])
 
-  const totalAssets = useMemo(() => Object.values(netWorthData.assets).reduce((s, v) => s + Number(v || 0), 0), [netWorthData.assets])
+  // Assets = Cash + Savings + Investments + Equity
+  // For simplicity, we use netWorthData fields but map them to the new logic
+  const totalAssets = useMemo(() => {
+    const cash = Number(netWorthData.assets.cash || 0)
+    const realEstate = Number(netWorthData.assets.realEstate || 0)
+    const vehicles = Number(netWorthData.assets.vehicles || 0)
+    const other = Number(netWorthData.assets.other || 0)
+    // Savings and Investments come from both current budget total and historical data
+    const assetsTotal = cash + totalSavings + totalInvesting + realEstate + vehicles + other
+    return assetsTotal
+  }, [netWorthData.assets, totalSavings, totalInvesting])
+
   const totalLiabilities = useMemo(() => Object.values(netWorthData.liabilities).reduce((s, v) => s + Number(v || 0), 0), [netWorthData.liabilities])
   const netWorth = totalAssets - totalLiabilities
 
-  // Financial Health Score (0-100)
-  const healthScore = useMemo(() => {
-    let score = 0
-    const savingsRate = totalIncome > 0 ? (totalIncome - totalExpenses) / totalIncome : 0
-    if (savingsRate >= 0.2) score += 40
-    else if (savingsRate >= 0.1) score += 20
-    
-    if (totalLiabilities === 0) score += 30
-    else if (totalLiabilities < totalAssets / 2) score += 15
-    
-    if (goals.some(g => g.name === 'Starter Emergency Fund' && g.current >= g.target)) score += 30
-    
-    return score
-  }, [totalIncome, totalExpenses, totalAssets, totalLiabilities, goals])
+  // Unassigned Money = Income - (Expenses + Savings + Investing)
+  const unassigned = totalIncome - (totalExpenses + totalSavings + totalInvesting)
+  const unassignedPlanned = totalPlannedIncome - (totalPlannedExpenses + totalPlannedSavings + totalPlannedInvesting)
 
   const updateBudgetItem = (section, id, field, value) => {
-    setBudget(prev => ({
+    let finalValue = Number(value) || 0
+    // Force Expenses to be negative storage, even if user enters positive
+    if (['fixedBills', 'food', 'funMoney'].includes(section)) {
+      finalValue = -Math.abs(finalValue)
+    } else {
+      finalValue = Math.abs(finalValue)
+    }
+
+    setBudgets(prev => ({
       ...prev,
-      [section]: prev[section].map(item => item.id === id ? { ...item, [field]: Number(value) || 0 } : item),
+      [currentMonth]: {
+        ...prev[currentMonth],
+        [section]: prev[currentMonth][section].map(item => item.id === id ? { ...item, [field]: finalValue } : item),
+      }
     }))
   }
 
   const updateBudgetItemName = (section, id, name) => {
-    setBudget(prev => ({
+    setBudgets(prev => ({
       ...prev,
-      [section]: prev[section].map(item => item.id === id ? { ...item, name } : item),
+      [currentMonth]: {
+        ...prev[currentMonth],
+        [section]: prev[currentMonth][section].map(item => item.id === id ? { ...item, name } : item),
+      }
     }))
   }
 
   const addBudgetItem = (section, name = 'New Item') => {
     const id = Date.now().toString()
     const iconMap = { income: 'payments', fixedBills: 'receipt', food: 'lunch_dining', savings: 'savings', investing: 'bar_chart', funMoney: 'celebration' }
-    setBudget(prev => ({
+    setBudgets(prev => ({
       ...prev,
-      [section]: [...(prev[section] || []), { id, name, icon: iconMap[section] || 'circle', planned: 0, actual: 0 }],
+      [currentMonth]: {
+        ...prev[currentMonth],
+        [section]: [...(prev[currentMonth][section] || []), { id, name, icon: iconMap[section] || 'circle', planned: 0, actual: 0 }],
+      }
     }))
   }
 
   const removeBudgetItem = (section, id) => {
-    setBudget(prev => ({ ...prev, [section]: prev[section].filter(item => item.id !== id) }))
+    setBudgets(prev => ({
+      ...prev,
+      [currentMonth]: {
+        ...prev[currentMonth],
+        [section]: prev[currentMonth][section].filter(item => item.id !== id),
+      }
+    }))
+  }
+
+  const switchMonth = (month) => {
+    if (!budgets[month]) {
+      setBudgets(prev => ({ ...prev, [month]: { ...budget } })) // Copy previous month structure
+    }
+    setCurrentMonth(month)
   }
 
   const updateNetWorthField = (type, field, value) => {
@@ -185,20 +223,23 @@ export function AppProvider({ children }) {
     setTransactions(prev => [newTx, ...prev])
     
     // Auto-update budget actuals
-    if (tx.category === 'Income') {
-      // Find 'Partner 1' or 'Partner 2' in income based on some logic, or just first one
-      updateBudgetItem('income', budget.income[0].id, 'actual', budget.income[0].actual + tx.amount)
-    } else {
-      // Find matching category in budget
-      const sectionMap = { 'Fixed Bills': 'fixedBills', 'Food': 'food', 'Savings': 'savings', 'Investing': 'investing', 'Fun Money': 'funMoney' }
-      const section = sectionMap[tx.category]
-      if (section && budget[section][0]) {
-        updateBudgetItem(section, budget[section][0].id, 'actual', budget[section][0].actual + tx.amount)
-      }
+    const sectionMap = { 'Income': 'income', 'Fixed Bills': 'fixedBills', 'Food': 'food', 'Savings': 'savings', 'Investing': 'investing', 'Fun Money': 'funMoney' }
+    const section = sectionMap[tx.category]
+    if (section && budget[section] && budget[section][0]) {
+      updateBudgetItem(section, budget[section][0].id, 'actual', (budget[section][0].actual || 0) + tx.amount)
     }
   }
 
-  const removeTransaction = (id) => setTransactions(prev => prev.filter(t => t.id !== id))
+  const healthScore = useMemo(() => {
+    let score = 0
+    const savingsRate = totalIncome > 0 ? (totalSavings + totalInvesting) / totalIncome : 0
+    if (savingsRate >= 0.2) score += 40
+    else if (savingsRate >= 0.1) score += 20
+    if (totalLiabilities === 0) score += 30
+    else if (totalLiabilities < totalAssets / 2) score += 15
+    if (goals.some(g => g.name === 'Starter Emergency Fund' && g.current >= g.target)) score += 30
+    return score
+  }, [totalIncome, totalSavings, totalInvesting, totalAssets, totalLiabilities, goals])
 
   const nextImmediateGoal = useMemo(() => goals.find(g => g.isImmediate && g.current < g.target), [goals])
   const nextGoal = useMemo(() => goals.find(g => !g.isImmediate && !g.isUltimate && g.current < g.target), [goals])
@@ -206,13 +247,15 @@ export function AppProvider({ children }) {
 
   return (
     <AppContext.Provider value={{
-      settings, setSettings, budget, setBudget,
+      settings, setSettings, budget, budgets, setBudgets, currentMonth, switchMonth,
+      unassigned, unassignedPlanned,
       netWorthData, netWorth, totalAssets, totalLiabilities,
       goals, setGoals, transactions, healthScore,
-      totalIncome, totalExpenses, totalPlannedIncome, totalPlannedExpenses,
+      totalIncome, totalExpenses, totalSavings, totalInvesting,
+      totalPlannedIncome, totalPlannedExpenses, totalPlannedSavings, totalPlannedInvesting,
       updateBudgetItem, updateBudgetItemName, addBudgetItem, removeBudgetItem,
       updateNetWorthField, saveNetWorthSnapshot,
-      updateGoal, addGoal, removeGoal, addTransaction, removeTransaction,
+      updateGoal, addGoal, removeGoal, addTransaction, removeTransaction: (id) => setTransactions(prev => prev.filter(tx => tx.id !== id)),
       nextImmediateGoal, nextGoal, ultimateGoal,
     }}>
       {children}

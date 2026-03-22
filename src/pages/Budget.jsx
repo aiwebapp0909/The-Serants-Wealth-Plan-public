@@ -1,291 +1,239 @@
-import { useState, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useApp } from '../context/AppContext'
 
-const ICON_MAP = {
-  person: 'person',
-  storefront: 'storefront',
-  home: 'home',
-  directions_car: 'directions_car',
-  smartphone: 'smartphone',
-  wifi: 'wifi',
-  bolt: 'bolt',
-  shopping_cart: 'shopping_cart',
-  restaurant: 'restaurant',
-  savings: 'savings',
-  trending_up: 'trending_up',
-  sports_esports: 'sports_esports',
-  spa: 'spa',
-  payments: 'payments',
-  receipt: 'receipt',
-  lunch_dining: 'lunch_dining',
-  bar_chart: 'bar_chart',
-  celebration: 'celebration',
-  circle: 'circle',
+function fmt(n) {
+  return `$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0 })}`
 }
 
-function EditableCell({ value, onChange, isExpense = false, className = '' }) {
+function EditableCell({ value, onSave, isExpense = false }) {
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
-  const inputRef = useRef(null)
+  const [temp, setTemp] = useState(Math.abs(value))
 
-  const handleFocus = () => {
-    setDraft(value === 0 ? '' : String(value))
-    setEditing(true)
-    setTimeout(() => inputRef.current?.select(), 0)
-  }
-
-  const handleBlur = () => {
-    setEditing(false)
-    const parsed = parseFloat(draft.replace(/[^0-9.]/g, ''))
-    onChange(isNaN(parsed) ? 0 : parsed)
-  }
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') inputRef.current?.blur()
-    if (e.key === 'Escape') { setDraft(String(value)); inputRef.current?.blur() }
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        type="number"
+        value={temp}
+        onChange={(e) => setTemp(e.target.value)}
+        onBlur={() => { setEditing(false); onSave(temp) }}
+        onKeyDown={(e) => { if (e.key === 'Enter') { setEditing(false); onSave(temp) } }}
+        className="w-full bg-surface-container border border-primary/50 rounded px-2 py-0.5 text-right outline-none font-body text-xs text-on-surface"
+      />
+    )
   }
 
   return (
-    <div
-      className={`relative flex items-center justify-end gap-0.5 cursor-pointer ${className}`}
-      onClick={() => !editing && inputRef.current?.focus()}
+    <div 
+      onClick={() => setEditing(true)}
+      className={`cursor-text text-right px-2 py-0.5 rounded hover:bg-surface-container-high transition-colors font-body text-xs font-semibold ${isExpense ? 'text-error' : 'text-success'}`}
     >
-      <span className={`text-xs font-body ${isExpense ? 'text-error' : 'text-gray-400'}`}>
-        {isExpense ? '-$' : '$'}
-      </span>
-      <input
-        ref={inputRef}
-        type="number"
-        value={editing ? draft : value || 0}
-        onChange={e => setDraft(e.target.value)}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        className="bg-transparent text-on-surface text-xs font-body w-16 text-right outline-none focus:text-primary transition-colors"
-        min="0"
-        step="1"
-      />
+      {isExpense && '-'} {fmt(value)}
     </div>
   )
 }
 
-function BudgetSection({ title, sectionKey, items, isExpense = false, color = 'text-on-surface' }) {
-  const [collapsed, setCollapsed] = useState(false)
-  const { updateBudgetItem, updateBudgetItemName, addBudgetItem, removeBudgetItem } = useApp()
-
-  const totalPlanned = items.reduce((s, i) => s + Number(i.planned || 0), 0)
-  const totalActual = items.reduce((s, i) => s + Number(i.actual || 0), 0)
+function BudgetSection({ title, items, section, onUpdate, onAdd, onRemove, isExpense = false }) {
+  const total = items.reduce((s, i) => s + Math.abs(i.actual || 0), 0)
+  const totalPlanned = items.reduce((s, i) => s + Math.abs(i.planned || 0), 0)
 
   return (
-    <div className="bg-surface border border-outline-variant rounded-2xl overflow-hidden">
-      {/* Section Header */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-surface-container transition-colors"
-      >
+    <div className="bg-surface border border-outline-variant rounded-2xl overflow-hidden mb-4">
+      <div className="bg-surface-container px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className={`material-symbols-outlined ${collapsed ? '' : 'rotate-0'} text-gray-400 text-base transition-transform ${collapsed ? '-rotate-90' : ''}`}>
-            expand_more
-          </span>
-          <span className={`text-xs font-body font-bold uppercase tracking-widest ${color}`}>
-            {title}
-          </span>
-          <span className={`text-xs font-body font-bold ${isExpense ? 'text-error' : 'text-success'}`}>
-            {isExpense ? `-$${totalPlanned.toLocaleString()}` : `+$${totalPlanned.toLocaleString()}`}
-          </span>
+           <h3 className="font-headline font-bold text-on-surface text-sm">{title}</h3>
+           <span className="text-[10px] font-body text-gray-500 uppercase tracking-widest bg-black/5 px-2 py-0.5 rounded-full">
+             Total: {isExpense ? '-' : ''}{fmt(total)}
+           </span>
         </div>
-      </button>
-
-      <AnimatePresence>
-        {!collapsed && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            {items.map((item, idx) => {
-              const remaining = isExpense
-                ? item.planned - item.actual
-                : item.actual - item.planned
-              return (
-                <div
-                  key={item.id}
-                  className={`flex items-center px-4 py-3 gap-3 ${idx < items.length - 1 ? 'border-b border-outline-variant/40' : ''} group hover:bg-surface-container/40 transition-colors`}
-                >
-                  {/* Icon */}
-                  <div className="w-7 h-7 rounded-full bg-surface-container flex items-center justify-center flex-shrink-0">
-                    <span className="material-symbols-outlined text-gray-400" style={{ fontSize: '13px' }}>
-                      {ICON_MAP[item.icon] || 'circle'}
-                    </span>
-                  </div>
-
-                  {/* Name */}
-                  <div className="flex-1 min-w-0">
+        <button onClick={() => onAdd(section)} className="text-primary hover:scale-110 transition-transform">
+          <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>add_circle</span>
+        </button>
+      </div>
+      
+      <div className="p-2">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="text-[10px] font-body text-gray-500 uppercase tracking-wider">
+              <th className="text-left px-2 py-1 font-semibold">Category</th>
+              <th className="text-right px-2 py-1 font-semibold w-24">Planned</th>
+              <th className="text-right px-2 py-1 font-semibold w-24">Spent</th>
+              <th className="w-8"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map(item => (
+              <tr key={item.id} className="border-t border-outline-variant/30 group">
+                <td className="px-2 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-gray-400" style={{ fontSize: '16px' }}>{item.icon}</span>
                     <input
-                      type="text"
                       value={item.name}
-                      onChange={e => updateBudgetItemName(sectionKey, item.id, e.target.value)}
-                      className="bg-transparent text-on-surface text-xs font-body w-full outline-none focus:text-primary transition-colors truncate"
+                      onChange={(e) => onUpdate(section, item.id, 'name', e.target.value)}
+                      className="bg-transparent border-none outline-none font-body text-xs text-on-surface w-full focus:bg-surface-container-high rounded px-1"
                     />
                   </div>
-
-                  {/* Planned */}
-                  <EditableCell
-                    value={item.planned}
-                    onChange={v => updateBudgetItem(sectionKey, item.id, 'planned', v)}
+                </td>
+                <td className="px-2 py-2">
+                  <EditableCell 
+                    value={item.planned} 
+                    onSave={(v) => onUpdate(section, item.id, 'planned', v)} 
                     isExpense={isExpense}
-                    className="w-20"
                   />
-
-                  {/* Actual */}
-                  <EditableCell
-                    value={item.actual}
-                    onChange={v => updateBudgetItem(sectionKey, item.id, 'actual', v)}
+                </td>
+                <td className="px-2 py-2">
+                  <EditableCell 
+                    value={item.actual} 
+                    onSave={(v) => onUpdate(section, item.id, 'actual', v)} 
                     isExpense={isExpense}
-                    className="w-20"
                   />
-
-                  {/* Remaining */}
-                  <div className="w-12 text-right">
-                    <span className={`text-xs font-body ${
-                      remaining > 0 ? 'text-success' : remaining < 0 ? 'text-error' : 'text-gray-600'
-                    }`}>
-                      {remaining < 0 ? '-' : ''}${Math.abs(remaining).toLocaleString()}
-                    </span>
-                  </div>
-
-                  {/* Delete */}
-                  <button
-                    onClick={() => removeBudgetItem(sectionKey, item.id)}
-                    className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-error transition-all ml-1"
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>close</span>
+                </td>
+                <td className="px-1 text-center">
+                  <button onClick={() => onRemove(section, item.id)} className="text-gray-400 hover:text-error opacity-0 group-hover:opacity-100 transition-all">
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>delete</span>
                   </button>
-                </div>
-              )
-            })}
-
-            {/* Add Row */}
-            <button
-              onClick={() => addBudgetItem(sectionKey)}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 text-gray-600 hover:text-gray-400 text-xs font-body border-t border-dashed border-outline-variant/50 transition-colors"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>add</span>
-              ADD CUSTOM CATEGORY
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
 
 export default function Budget() {
-  const { budget, totalIncome, totalExpenses, totalPlannedIncome, totalPlannedExpenses } = useApp()
-  const totalRemaining = totalPlannedIncome - totalPlannedExpenses
+  const { 
+    budget, updateBudgetItem, updateBudgetItemName, addBudgetItem, removeBudgetItem,
+    totalIncome, totalExpenses, totalSavings, totalInvesting,
+    unassigned, unassignedPlanned, currentMonth, switchMonth
+  } = useApp()
+
+  const months = useMemo(() => {
+    const res = []
+    const now = new Date()
+    for (let i = -6; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
+      res.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+    return res
+  }, [])
+
+  const monthDisplay = useMemo(() => {
+    const [year, month] = currentMonth.split('-')
+    return new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  }, [currentMonth])
 
   return (
-    <div className="bg-background min-h-screen px-4 pt-5 pb-4">
-      {/* Header */}
-      <div className="mb-5">
-        <h1 className="font-headline font-bold text-on-surface text-2xl">Monthly Configurator</h1>
-        <p className="text-gray-500 text-xs font-body mt-1">
-          Plan every dollar. Adjust categories, inputs, and amounts directly inline.
-        </p>
+    <div className="bg-background min-h-screen px-4 pt-6 pb-24">
+      {/* Header & Month Selector */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="font-headline font-bold text-on-surface text-2xl">{monthDisplay} Budget</h1>
+          <p className="text-gray-500 text-[10px] font-body uppercase tracking-[0.2em] mt-1">Direct Zero-Based Control</p>
+        </div>
+        <select 
+          value={currentMonth}
+          onChange={(e) => switchMonth(e.target.value)}
+          className="bg-surface-container border border-outline-variant rounded-xl px-3 py-1.5 text-xs font-body text-on-surface outline-none focus:border-primary"
+        >
+          {months.map(m => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
       </div>
 
-      {/* Summary Bar */}
-      <div className="bg-surface border border-outline-variant rounded-2xl p-4 mb-4">
-        <div className="grid grid-cols-3 gap-2 text-center">
+      {/* ZERO-BASED STATUS BAR */}
+      <motion.div 
+        layout
+        className={`bg-surface border-2 rounded-2xl p-4 mb-6 transition-colors shadow-lg ${
+          unassigned === 0 ? 'border-success/50' : unassigned > 0 ? 'border-primary/50' : 'border-error/50'
+        }`}
+      >
+        <div className="flex items-center justify-between">
           <div>
-            <p className="text-success font-headline font-bold text-base">
-              ${totalPlannedIncome.toLocaleString()}
-            </p>
-            <p className="text-gray-500 text-[9px] font-body uppercase tracking-wider">Planned Income</p>
+            <p className="text-[10px] font-body font-bold text-gray-500 uppercase tracking-widest mb-1">Budget Assignment Status</p>
+            <h2 className={`font-headline font-bold text-2xl ${
+              unassigned === 0 ? 'text-success' : unassigned > 0 ? 'text-primary' : 'text-error'
+            }`}>
+              {unassigned === 0 ? 'Fully Allocated ✅' : unassigned > 0 ? `${fmt(unassigned)} Unassigned` : `${fmt(Math.abs(unassigned))} Over Budget`}
+            </h2>
           </div>
-          <div>
-            <p className="text-error font-headline font-bold text-base">
-              -${totalPlannedExpenses.toLocaleString()}
-            </p>
-            <p className="text-gray-500 text-[9px] font-body uppercase tracking-wider">Planned Out</p>
-          </div>
-          <div>
-            <p className={`font-headline font-bold text-base ${totalRemaining >= 0 ? 'text-primary' : 'text-error'}`}>
-              {totalRemaining >= 0 ? '+' : '-'}${Math.abs(totalRemaining).toLocaleString()}
-            </p>
-            <p className="text-gray-500 text-[9px] font-body uppercase tracking-wider">Remaining</p>
+          <div className="text-right">
+             <p className="text-[9px] font-body text-gray-400 uppercase tracking-widest">Left to Plan</p>
+             <p className={`font-headline font-bold text-base ${unassignedPlanned === 0 ? 'text-success' : 'text-gray-500'}`}>
+               {fmt(unassignedPlanned)}
+             </p>
           </div>
         </div>
-        <div className="mt-3 h-1.5 bg-surface-container-high rounded-full overflow-hidden">
-          <div
-            className="h-full bg-primary rounded-full transition-all"
-            style={{ width: `${Math.min(100, totalPlannedIncome > 0 ? (totalPlannedExpenses / totalPlannedIncome) * 100 : 0)}%` }}
-          />
-        </div>
-        <p className="text-gray-600 text-[9px] font-body mt-1.5 text-center">
-          {totalPlannedIncome > 0
-            ? `${Math.round((totalPlannedExpenses / totalPlannedIncome) * 100)}% of income allocated`
-            : 'Enter your income to track allocation'}
-        </p>
-      </div>
-
-      {/* Column Headers */}
-      <div className="flex items-center px-4 py-1 mb-1">
-        <span className="flex-1 text-[9px] font-body font-semibold text-gray-600 uppercase tracking-wider">Category</span>
-        <span className="w-20 text-right text-[9px] font-body font-semibold text-gray-600 uppercase tracking-wider">Planned ($)</span>
-        <span className="w-20 text-right text-[9px] font-body font-semibold text-gray-600 uppercase tracking-wider">Actual ($)</span>
-        <span className="w-12 text-right text-[9px] font-body font-semibold text-gray-600 uppercase tracking-wider">Left</span>
-        <span className="w-6" />
-      </div>
+      </motion.div>
 
       {/* Sections */}
-      <div className="space-y-3">
-        <BudgetSection
-          title="Income"
-          sectionKey="income"
-          items={budget.income}
-          isExpense={false}
-          color="text-success"
-        />
-        <BudgetSection
-          title="Fixed Bills"
-          sectionKey="fixedBills"
-          items={budget.fixedBills}
-          isExpense
-          color="text-error"
-        />
-        <BudgetSection
-          title="Food & Dining"
-          sectionKey="food"
-          items={budget.food}
-          isExpense
-          color="text-error"
-        />
-        <BudgetSection
-          title="Fun Money"
-          sectionKey="funMoney"
-          items={budget.funMoney}
-          isExpense
-          color="text-error"
-        />
-        <BudgetSection
-          title="Savings"
-          sectionKey="savings"
-          items={budget.savings}
-          isExpense
-          color="text-error"
-        />
-        <BudgetSection
-          title="Investing"
-          sectionKey="investing"
-          items={budget.investing}
-          isExpense
-          color="text-error"
-        />
+      <BudgetSection 
+        title="💰 Income" 
+        items={budget.income} 
+        section="income" 
+        onUpdate={updateBudgetItem} 
+        onAdd={addBudgetItem} 
+        onRemove={removeBudgetItem} 
+      />
+
+      <div className="relative py-2">
+        <div className="absolute inset-0 flex items-center" aria-hidden="true">
+          <div className="w-full border-t border-dashed border-outline-variant"></div>
+        </div>
+        <div className="relative flex justify-center">
+          <span className="bg-background px-3 text-[10px] font-body font-bold text-gray-500 uppercase tracking-widest">Planned Outflow</span>
+        </div>
       </div>
+      
+      <BudgetSection 
+        title="🔴 Fixed Bills" 
+        items={budget.fixedBills} 
+        section="fixedBills" 
+        onUpdate={updateBudgetItem} 
+        onAdd={addBudgetItem} 
+        onRemove={removeBudgetItem} 
+        isExpense 
+      />
+      <BudgetSection 
+        title="🔴 Food & Dining" 
+        items={budget.food} 
+        section="food" 
+        onUpdate={updateBudgetItem} 
+        onAdd={addBudgetItem} 
+        onRemove={removeBudgetItem} 
+        isExpense 
+      />
+      
+      <BudgetSection 
+        title="🟢 Savings Allocations" 
+        items={budget.savings} 
+        section="savings" 
+        onUpdate={updateBudgetItem} 
+        onAdd={addBudgetItem} 
+        onRemove={removeBudgetItem} 
+      />
+      
+      <BudgetSection 
+        title="🟢 Wealth Investing" 
+        items={budget.investing} 
+        section="investing" 
+        onUpdate={updateBudgetItem} 
+        onAdd={addBudgetItem} 
+        onRemove={removeBudgetItem} 
+      />
+      
+      <BudgetSection 
+        title="🔴 Fun & Lifestyle" 
+        items={budget.funMoney} 
+        section="funMoney" 
+        onUpdate={updateBudgetItem} 
+        onAdd={addBudgetItem} 
+        onRemove={removeBudgetItem} 
+        isExpense 
+      />
     </div>
   )
 }

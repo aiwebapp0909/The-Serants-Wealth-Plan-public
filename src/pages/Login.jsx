@@ -11,14 +11,21 @@ export default function Login() {
         animate={{ opacity: 1, scale: 1 }}
         className="w-full max-w-sm"
       >
-        <div className="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center mx-auto mb-6 border border-primary/20">
-          <span className="material-symbols-outlined text-primary text-4xl">payments</span>
-        </div>
-        
-        <h1 className="font-headline font-bold text-on-surface text-3xl mb-2">WealthSync</h1>
-        <p className="text-gray-500 font-body text-sm mb-12">
-          Serants Wealth Plan (SWP) — A Couples Wealth Operating System
-        </p>
+        {/* Logo & Headline */}
+        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-16 relative">
+          <div className="mx-auto w-24 h-24 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center shadow-xl shadow-amber-500/20 mb-8 relative">
+             <span className="material-symbols-outlined text-background text-5xl font-bold">handshake</span>
+             <div className="absolute -top-3 -right-3">
+                <span className="material-symbols-outlined text-amber-500 text-3xl animate-pulse">star</span>
+             </div>
+          </div>
+          <h1 className="font-headline font-bold text-on-surface text-4xl mb-3 tracking-tight leading-tight">
+            SERANT WEALTH <span className="text-amber-500">PLAN</span>
+          </h1>
+          <p className="text-gray-400 text-sm font-body px-8 font-medium italic">
+            A Couple’s Financial Operating System. Reaching $20M net worth, together.
+          </p>
+        </motion.div>
 
         <div className="bg-surface border border-outline-variant rounded-3xl p-8 shadow-2xl space-y-6">
           <p className="text-on-surface font-body text-sm font-medium">
