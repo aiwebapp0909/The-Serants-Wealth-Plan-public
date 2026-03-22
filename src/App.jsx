@@ -7,18 +7,43 @@ import Budget from './pages/Budget'
 import Analytics from './pages/Analytics'
 import Goals from './pages/Goals'
 import Invest from './pages/Invest'
-import Tools from './pages/Tools'
+import Security from './pages/Security'
 import Transactions from './pages/Transactions'
 import Login from './pages/Login'
+import { useEffect, useRef } from 'react'
 
 function AppContent() {
-  const { user, loading } = useAuth()
+  const { user, loading, logout } = useAuth()
+  const timerRef = useRef(null)
+
+  // 🛡️ ZERO-TRUST INACTIVITY PROTECTION (15 MIN)
+  useEffect(() => {
+    if (!user) return;
+    
+    const resetTimer = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        console.warn('Inactivity Timeout. Forced Logout for Security.');
+        logout();
+      }, 15 * 60 * 1000); // 15 Min Lockout
+    };
+
+    window.addEventListener('mousemove', resetTimer);
+    window.addEventListener('keydown', resetTimer);
+    resetTimer();
+
+    return () => {
+      window.removeEventListener('mousemove', resetTimer);
+      window.removeEventListener('keydown', resetTimer);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    }
+  }, [user, logout]);
 
   if (loading) {
     return (
       <div className="bg-background min-h-screen flex flex-col items-center justify-center p-8 text-center space-y-4">
         <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary animate-spin" />
-        <p className="font-body text-gray-500 font-medium">Syncing wealth data...</p>
+        <p className="font-body text-gray-500 font-medium tracking-tight">Syncing fintech environment...</p>
       </div>
     )
   }
@@ -44,7 +69,7 @@ function AppContent() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/goals" element={<Goals />} />
           <Route path="/invest" element={<Invest />} />
-          <Route path="/tools" element={<Tools />} />
+          <Route path="/security" element={<Security />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

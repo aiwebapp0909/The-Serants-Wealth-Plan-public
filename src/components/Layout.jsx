@@ -8,7 +8,7 @@ const navItems = [
   { path: '/analytics', label: 'Analytics', icon: 'trending_up' },
   { path: '/goals', label: 'Goals', icon: 'flag' },
   { path: '/invest', label: 'Invest', icon: 'show_chart' },
-  { path: '/tools', label: 'Tools', icon: 'build' },
+  { path: '/security', label: 'Security', icon: 'shield_locked' },
 ]
 
 export default function Layout({ children }) {
