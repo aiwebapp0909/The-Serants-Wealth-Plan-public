@@ -26,10 +26,13 @@ export default function Dashboard() {
     healthScore, goals, unassigned
   } = useApp()
   
-  const { userProfile, user, logout } = useAuth()
+  const { createHousehold, joinHousehold, userProfile, user, logout } = useAuth()
   const { insight, loading: aiLoading, generateInsight } = useAI()
   const [showSyncModal, setShowSyncModal] = useState(false)
-  const [groupIdInput, setGroupIdInput] = useState('')
+  const [householdIdInput, setHouseholdIdInput] = useState('')
+  const [passcodeInput, setPasscodeInput] = useState('')
+  const [isCreating, setIsCreating] = useState(false)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     if (userProfile && !insight && !aiLoading) {
@@ -44,12 +47,20 @@ export default function Dashboard() {
     }
   }, [userProfile, netWorth, totalIncome, totalExpenses, healthScore, nextImmediateGoal])
 
-  const handleJoinGroup = async () => {
-    if (!groupIdInput.trim() || !user) return
+  const handleCreate = async () => {
+    if (!passcodeInput.trim()) return
     try {
-      await updateDoc(doc(db, 'users', user.uid), { groupId: groupIdInput.trim() })
-      window.location.reload()
-    } catch (e) { console.error(e) }
+      await createHousehold(passcodeInput)
+      setShowSyncModal(false)
+    } catch (e) { setError(e.message) }
+  }
+
+  const handleJoin = async () => {
+    if (!householdIdInput.trim() || !passcodeInput.trim()) return
+    try {
+      await joinHousehold(householdIdInput.trim(), passcodeInput)
+      setShowSyncModal(false)
+    } catch (e) { setError(e.message) }
   }
 
   return (
@@ -76,10 +87,10 @@ export default function Dashboard() {
           </button>
           <button 
             onClick={() => setShowSyncModal(true)}
-            className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs font-body font-bold transition-all ${userProfile?.groupId ? 'bg-success/10 border-success/40 text-success' : 'bg-surface-container border-outline-variant text-on-surface hover:border-primary/50'}`}
+            className={`flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs font-body font-bold transition-all ${userProfile?.householdId ? 'bg-success/10 border-success/40 text-success' : 'bg-surface-container border-outline-variant text-on-surface hover:border-primary/50'}`}
           >
-            <span className={userProfile?.groupId ? 'text-success' : 'text-primary'}>⚡</span>
-            {userProfile?.groupId ? 'Synced' : 'Couple Sync'}
+            <span className={userProfile?.householdId ? 'text-success' : 'text-primary'}>⚡</span>
+            {userProfile?.householdId ? 'Synced' : 'Couple Sync'}
           </button>
         </div>
       </div>
@@ -134,22 +145,24 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {/* ROW 2: NET WORTH + HEALTH GRID */}
+        {/* ROW 2: LEFT TO PLAN + HEALTH GRID */}
         <div className="grid grid-cols-2 gap-3">
-          {/* Calculated Net Worth */}
+          {/* Left to Plan */}
           <div className="bg-surface border border-outline-variant rounded-2xl p-4 h-36 flex flex-col justify-between">
             <div>
-              <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest mb-2">Calculated Net Worth</p>
-              <h2 className="font-headline font-bold text-on-surface text-3xl">{fmt(netWorth)}</h2>
+              <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest mb-2">Left to Plan</p>
+              <h2 className={`font-headline font-bold text-3xl ${unassigned > 0 ? 'text-primary' : unassigned < 0 ? 'text-error' : 'text-success'}`}>
+                {fmt(unassigned)}
+              </h2>
             </div>
             <div className="space-y-1">
               <div className="flex justify-between items-center text-[9px] font-body">
-                <span className="text-gray-500 uppercase font-bold tracking-widest">Total Assets</span>
-                <span className="text-success font-bold">{fmt(totalAssets)}</span>
+                <span className="text-gray-500 uppercase font-bold tracking-widest">Unassigned</span>
+                <span className={unassigned !== 0 ? 'text-primary font-bold' : 'text-success font-bold'}>{unassigned === 0 ? 'Perfect ✅' : fmt(unassigned)}</span>
               </div>
               <div className="flex justify-between items-center text-[9px] font-body">
-                <span className="text-gray-500 uppercase font-bold tracking-widest">Total Debt</span>
-                <span className="text-error font-bold">-{fmt(totalLiabilities)}</span>
+                <span className="text-gray-500 uppercase font-bold tracking-widest">Net Worth</span>
+                <span className="text-on-surface/60">{fmt(netWorth)}</span>
               </div>
             </div>
           </div>
@@ -163,7 +176,7 @@ export default function Dashboard() {
                 <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest mb-2">Health Score</p>
                 <h2 className="font-headline font-bold text-on-surface text-4xl">{healthScore}</h2>
              </div>
-             <div className="h-1 bg-surface-container-high rounded-full overflow-hidden">
+             <div className="h-1.5 bg-surface-container-high rounded-full overflow-hidden">
                 <motion.div initial={{ width: 0 }} animate={{ width: `${healthScore}%` }} className={`h-full rounded-full ${healthScore >= 70 ? 'bg-success' : 'bg-amber-500'}`} />
              </div>
           </div>
@@ -219,13 +232,43 @@ export default function Dashboard() {
       <AnimatePresence>
         {showSyncModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSyncModal(false)} className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => { setShowSyncModal(false); setError(''); }} className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-sm bg-surface border border-outline-variant rounded-3xl p-6 shadow-2xl">
-              <h2 className="font-headline font-bold text-on-surface text-xl mb-6 text-center">Couple Sync</h2>
-              <div className="space-y-4">
-                <input type="text" placeholder="Enter Group ID" value={groupIdInput} onChange={(e) => setGroupIdInput(e.target.value)} className="w-full bg-surface-container border border-outline-variant rounded-xl py-3 px-4 text-sm outline-none focus:border-primary text-center" />
-                <button onClick={handleJoinGroup} className="w-full bg-primary text-background rounded-xl py-3 text-sm font-bold">JOIN GROUP</button>
-              </div>
+              <h2 className="font-headline font-bold text-on-surface text-xl mb-4 text-center">Household Access</h2>
+              
+              {userProfile?.householdId ? (
+                <div className="text-center space-y-4">
+                  <div className="bg-surface-container p-4 rounded-2xl border border-outline-variant">
+                    <p className="text-[10px] font-body text-gray-500 uppercase tracking-widest mb-1">Household ID</p>
+                    <p className="font-headline font-bold text-primary text-lg">{userProfile.householdId}</p>
+                  </div>
+                  <p className="text-xs font-body text-gray-500 px-4">Share this ID and your Secret Passcode with your partner to sync data.</p>
+                  <button onClick={() => setShowSyncModal(false)} className="w-full bg-surface-container border border-outline-variant rounded-xl py-3 text-sm font-bold">CLOSE</button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  <div className="flex bg-surface-container rounded-xl p-1">
+                    <button onClick={() => setIsCreating(false)} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${!isCreating ? 'bg-surface shadow-sm text-primary' : 'text-gray-500'}`}>JOIN</button>
+                    <button onClick={() => setIsCreating(true)} className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${isCreating ? 'bg-surface shadow-sm text-primary' : 'text-gray-500'}`}>NEW HOUSE</button>
+                  </div>
+
+                  {error && <p className="text-[10px] font-body font-bold text-error uppercase text-center">{error}</p>}
+
+                  <div className="space-y-4">
+                    { !isCreating && (
+                      <input type="text" placeholder="Household ID (e.g. H-A1B2C3)" value={householdIdInput} onChange={(e) => setHouseholdIdInput(e.target.value.toUpperCase())} className="w-full bg-surface-container border border-outline-variant rounded-xl py-3 px-4 text-sm outline-none focus:border-primary text-center uppercase tracking-widest" />
+                    )}
+                    <input type="password" placeholder="Passcode (4-6 digits)" value={passcodeInput} onChange={(e) => setPasscodeInput(e.target.value)} className="w-full bg-surface-container border border-outline-variant rounded-xl py-3 px-4 text-sm outline-none focus:border-primary text-center tracking-[1em]" maxLength={6} />
+                    
+                    <button 
+                      onClick={isCreating ? handleCreate : handleJoin} 
+                      className="w-full bg-primary text-background rounded-xl py-3 text-sm font-bold shadow-lg shadow-primary/20"
+                    >
+                      {isCreating ? 'CREATE HOUSEHOLD' : 'LINK HOUSEHOLD'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </div>
         )}

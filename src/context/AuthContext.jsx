@@ -6,7 +6,8 @@ import {
   signOut 
 } from 'firebase/auth'
 import { auth, db } from '../firebase'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
+import bcrypt from 'bcryptjs'
 
 const AuthContext = createContext(null)
 
@@ -26,13 +27,12 @@ export function AuthProvider({ children }) {
       setUser(firebaseUser)
       
       if (firebaseUser) {
-        // Create a failsafe to not block the app forever if Firestore is slow
         const profileTimeout = setTimeout(() => {
           if (!snapshotResolved) {
-             console.warn('Firestore profile fetch timed out. Proceeding with basic user info.')
+             console.warn('Firestore profile fetch timed out. Proceeding...')
              setLoading(false)
           }
-        }, 2000)
+        }, 3000)
 
         try {
           const docRef = doc(db, 'users', firebaseUser.uid)
@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
               email: firebaseUser.email,
               displayName: firebaseUser.displayName,
               photoURL: firebaseUser.photoURL,
-              groupId: null,
+              householdId: null,
               createdAt: new Date().toISOString()
             }
             await setDoc(docRef, newProfile)
@@ -68,6 +68,48 @@ export function AuthProvider({ children }) {
     return () => unsubscribe()
   }, [])
 
+  const createHousehold = async (passcode) => {
+    if (!user) return
+    const householdId = `H-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
+    const salt = bcrypt.genSaltSync(10)
+    const passcodeHash = bcrypt.hashSync(passcode, salt)
+    
+    const householdRef = doc(db, 'households', householdId)
+    await setDoc(householdRef, {
+      id: householdId,
+      passcodeHash,
+      members: [user.uid],
+      createdAt: new Date().toISOString(),
+      name: `${user.displayName}'s House`
+    })
+
+    const userRef = doc(db, 'users', user.uid)
+    await updateDoc(userRef, { householdId })
+    setUserProfile(prev => ({ ...prev, householdId }))
+    return householdId
+  }
+
+  const joinHousehold = async (householdId, passcode) => {
+    if (!user) return
+    const householdRef = doc(db, 'households', householdId)
+    const householdSnap = await getDoc(householdRef)
+    
+    if (!householdSnap.exists()) throw new Error('Household not found.')
+    
+    const { passcodeHash, members } = householdSnap.data()
+    const isValid = bcrypt.compareSync(passcode, passcodeHash)
+    
+    if (!isValid) throw new Error('Invalid passcode.')
+    
+    if (!members.includes(user.uid)) {
+      await updateDoc(householdRef, { members: [...members, user.uid] })
+    }
+
+    const userRef = doc(db, 'users', user.uid)
+    await updateDoc(userRef, { householdId })
+    setUserProfile(prev => ({ ...prev, householdId }))
+  }
+
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider()
     try {
@@ -86,7 +128,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, userProfile, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, userProfile, loading, loginWithGoogle, logout, createHousehold, joinHousehold }}>
       {children}
     </AuthContext.Provider>
   )
@@ -95,5 +137,5 @@ export function AuthProvider({ children }) {
 export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx && auth) throw new Error('useAuth must be used within AuthProvider')
-  return ctx || { user: null, loading: false } // Fallback for local-only mode
+  return ctx || { user: null, loading: false }
 }

@@ -231,7 +231,7 @@ export default function Goals() {
                   <option>🟢 PHASE 1: FINANCIAL STABILITY</option>
                   <option>🔵 PHASE 2: WEALTH BUILDING</option>
                   <option>🟣 PHASE 3: FAMILY + ASSETS</option>
-                  <option>🔴 PHASE 5: FINANCIAL FREEDOM</option>
+                  <option>🔴 PHASE 4: FINANCIAL FREEDOM</option>
                 </select>
                 <textarea placeholder="Description" rows={3} className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.description} onChange={e => setNewGoal(p => ({ ...p, description: e.target.value }))} />
               </div>

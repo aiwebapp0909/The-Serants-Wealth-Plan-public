@@ -35,17 +35,22 @@ function EditableCell({ value, onSave, isExpense = false }) {
 }
 
 function BudgetSection({ title, items, section, onUpdate, onAdd, onRemove, isExpense = false }) {
-  const total = items.reduce((s, i) => s + Math.abs(i.actual || 0), 0)
+  const totalActual = items.reduce((s, i) => s + Math.abs(i.actual || 0), 0)
   const totalPlanned = items.reduce((s, i) => s + Math.abs(i.planned || 0), 0)
 
   return (
-    <div className="bg-surface border border-outline-variant rounded-2xl overflow-hidden mb-4">
+    <div className="bg-surface border border-outline-variant rounded-2xl overflow-hidden mb-4 shadow-sm">
       <div className="bg-surface-container px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-           <h3 className="font-headline font-bold text-on-surface text-sm">{title}</h3>
-           <span className="text-[10px] font-body text-gray-500 uppercase tracking-widest bg-black/5 px-2 py-0.5 rounded-full">
-             Total: {isExpense ? '-' : ''}{fmt(total)}
-           </span>
+        <div className="flex flex-col gap-0.5">
+           <h3 className="font-headline font-bold text-on-surface text-sm uppercase tracking-tight">{title}</h3>
+           <div className="flex items-center gap-3">
+             <span className="text-[9px] font-body text-gray-500 uppercase tracking-widest font-bold">
+               Planned: {fmt(totalPlanned)}
+             </span>
+             <span className={`text-[9px] font-body uppercase tracking-widest font-bold ${totalActual > totalPlanned && isExpense ? 'text-error' : totalActual >= totalPlanned && !isExpense ? 'text-success' : 'text-gray-400'}`}>
+               Actual: {fmt(totalActual)}
+             </span>
+           </div>
         </div>
         <button onClick={() => onAdd(section)} className="text-primary hover:scale-110 transition-transform">
           <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>add_circle</span>
@@ -58,7 +63,7 @@ function BudgetSection({ title, items, section, onUpdate, onAdd, onRemove, isExp
             <tr className="text-[10px] font-body text-gray-500 uppercase tracking-wider">
               <th className="text-left px-2 py-1 font-semibold">Category</th>
               <th className="text-right px-2 py-1 font-semibold w-24">Planned</th>
-              <th className="text-right px-2 py-1 font-semibold w-24">Spent</th>
+              <th className="text-right px-2 py-1 font-semibold w-24">Actual</th>
               <th className="w-8"></th>
             </tr>
           </thead>
@@ -90,7 +95,7 @@ function BudgetSection({ title, items, section, onUpdate, onAdd, onRemove, isExp
                   />
                 </td>
                 <td className="px-1 text-center">
-                  <button onClick={() => onRemove(section, item.id)} className="text-gray-400 hover:text-error opacity-0 group-hover:opacity-100 transition-all">
+                  <button onClick={() => onRemove(section, item.id)} className="text-gray-400 hover:text-error opacity-0 group-hover:opacity-100 transition-all text-[14px]">
                     <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>delete</span>
                   </button>
                 </td>
