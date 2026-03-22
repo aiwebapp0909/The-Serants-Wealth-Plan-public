@@ -85,7 +85,13 @@ export function AppProvider({ children }) {
         isSyncing.current = true
         if (data.settings) setSettings(data.settings)
         if (data.netWorthData) setNetWorthData(data.netWorthData)
-        if (data.goals) setGoals(data.goals)
+        if (data.goals) {
+          const migratedGoals = data.goals.map(g => ({
+            ...g,
+            phase: g.phase?.replace('PHASE 5', 'PHASE 4') || g.phase
+          }))
+          setGoals(migratedGoals)
+        }
         if (data.transactions) setTransactions(data.transactions)
         setTimeout(() => { isSyncing.current = false }, 100)
       } else {

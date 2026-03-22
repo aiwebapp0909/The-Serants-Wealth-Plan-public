@@ -129,7 +129,13 @@ export default function Goals() {
       const totalProgress = p.goals.reduce((sum, g) => sum + pct(g.current, g.target), 0)
       p.progress = Math.round(totalProgress / p.goals.length)
       return p
-    }).sort((a,b) => a.name.localeCompare(b.name))
+    }).sort((a, b) => {
+      const getOrder = (name) => {
+        const match = name.match(/PHASE (\d+)/i)
+        return match ? parseInt(match[1]) : 999
+      }
+      return getOrder(a.name) - getOrder(b.name)
+    })
   }, [goals])
 
   const wealthScore = useMemo(() => {
