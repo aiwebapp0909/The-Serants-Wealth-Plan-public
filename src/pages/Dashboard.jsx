@@ -1,155 +1,277 @@
 import { motion } from 'framer-motion'
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts'
+import { Link } from 'react-router-dom'
+import { useApp } from '../context/AppContext'
 
-const wealthData = [
-  { month: 'Jan', value: 42000 },
-  { month: 'Feb', value: 45500 },
-  { month: 'Mar', value: 43200 },
-  { month: 'Apr', value: 51000 },
-  { month: 'May', value: 58700 },
-  { month: 'Jun', value: 62400 },
-  { month: 'Jul', value: 71000 },
-  { month: 'Aug', value: 69500 },
-  { month: 'Sep', value: 78200 },
-  { month: 'Oct', value: 82000 },
-  { month: 'Nov', value: 89300 },
-  { month: 'Dec', value: 95800 },
-]
+function fmt(n, short = false) {
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (short && Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
+  return `$${n.toLocaleString()}`
+}
 
-const stats = [
-  { label: 'Total Wealth', value: '$95,800', change: '+14.2%', icon: 'account_balance' },
-  { label: 'Monthly Income', value: '$8,400', change: '+5.1%', icon: 'trending_up' },
-  { label: 'Investments', value: '$62,300', change: '+22.7%', icon: 'show_chart' },
-  { label: 'Savings Rate', value: '34%', change: '+3.2%', icon: 'savings' },
-]
+function pct(current, target) {
+  if (!target) return 0
+  return Math.min(100, Math.round((current / target) * 100))
+}
 
 export default function Dashboard() {
+  const {
+    netWorth, totalAssets, totalLiabilities,
+    totalIncome, totalExpenses, totalPlannedIncome, totalPlannedExpenses,
+    nextImmediateGoal, nextGoal, ultimateGoal,
+    budget,
+  } = useApp()
+
+  const savings = totalIncome - totalExpenses
+  const savingsRate = totalIncome > 0 ? Math.round((savings / totalIncome) * 100) : 0
+
+  const totalSavings = budget.savings.reduce((s, i) => s + Number(i.actual || 0), 0)
+  const totalInvesting = budget.investing.reduce((s, i) => s + Number(i.actual || 0), 0)
+
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="bg-background min-h-screen">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center justify-between mb-8"
-      >
-        <div>
-          <h1 className="font-headline text-3xl font-bold text-on-surface">
-            The Serants Wealth Plan
-          </h1>
-          <p className="text-gray-400 mt-1 font-body">Your path to financial sovereignty</p>
+      <div className="flex items-center justify-between px-4 pt-5 pb-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+            <span className="material-symbols-outlined text-primary text-base">people</span>
+          </div>
+          <span className="font-headline font-bold text-on-surface text-lg">WealthSync</span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center">
-            <span className="material-symbols-outlined text-primary text-xl">person</span>
-          </div>
+          <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-on-surface transition-colors">
+            <span className="material-symbols-outlined text-xl">notifications</span>
+          </button>
+          <button className="flex items-center gap-1.5 bg-surface-container border border-outline-variant rounded-full px-3 py-1.5 text-xs font-body font-medium text-on-surface hover:border-primary/50 transition-colors">
+            <span className="text-primary">⚡</span>
+            Couple Sync
+          </button>
         </div>
-      </motion.div>
-
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {stats.map((stat, i) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="bg-surface rounded-2xl p-5 border border-outline-variant"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-gray-400 text-sm font-body">{stat.label}</span>
-              <div className="w-9 h-9 rounded-xl bg-surface-container flex items-center justify-center">
-                <span className="material-symbols-outlined text-primary text-lg">{stat.icon}</span>
-              </div>
-            </div>
-            <div className="text-2xl font-headline font-bold text-on-surface">{stat.value}</div>
-            <div className="text-success text-sm mt-1 font-body">{stat.change} this year</div>
-          </motion.div>
-        ))}
       </div>
 
-      {/* Chart */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4 }}
-        className="bg-surface rounded-3xl p-6 border border-outline-variant mb-8"
-      >
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="font-headline text-xl font-bold text-on-surface">Wealth Growth</h2>
-            <p className="text-gray-400 text-sm font-body mt-1">12-month trajectory</p>
-          </div>
-          <span className="bg-surface-container text-primary text-xs font-body px-3 py-1 rounded-full">
-            2024
-          </span>
-        </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={wealthData}>
-            <defs>
-              <linearGradient id="goldGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="#D4AF37" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#333340" />
-            <XAxis dataKey="month" stroke="#666" tick={{ fill: '#999', fontSize: 12 }} />
-            <YAxis stroke="#666" tick={{ fill: '#999', fontSize: 12 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-            <Tooltip
-              contentStyle={{ background: '#15151C', border: '1px solid #333340', borderRadius: 12 }}
-              labelStyle={{ color: '#fff' }}
-              formatter={v => [`$${v.toLocaleString()}`, 'Net Worth']}
-            />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="#D4AF37"
-              strokeWidth={2}
-              fill="url(#goldGrad)"
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </motion.div>
-
-      {/* Plan Milestones */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="bg-surface rounded-3xl p-6 border border-outline-variant"
-      >
-        <h2 className="font-headline text-xl font-bold text-on-surface mb-5">Wealth Milestones</h2>
-        <div className="space-y-4">
-          {[
-            { label: 'Emergency Fund (6 months)', progress: 100, done: true },
-            { label: 'Debt Freedom', progress: 78, done: false },
-            { label: '$100K Net Worth', progress: 95, done: false },
-            { label: 'Investment Portfolio Goal', progress: 62, done: false },
-          ].map((m) => (
-            <div key={m.label}>
-              <div className="flex justify-between text-sm font-body mb-1">
-                <span className={m.done ? 'text-success' : 'text-gray-300'}>{m.label}</span>
-                <span className="text-gray-400">{m.progress}%</span>
+      <div className="px-4 space-y-3 pb-4">
+        {/* Row 1: Goals */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Next Immediate Goal */}
+          <Link to="/goals">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="bg-[#12121A] border border-outline-variant rounded-2xl p-4 h-36 flex flex-col justify-between relative overflow-hidden hover:border-primary/40 transition-colors"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[9px] font-body font-semibold tracking-widest text-gray-500 uppercase">Next Immediate Goal</span>
+                  <div className="w-6 h-6 rounded-full border border-dashed border-gray-600 flex items-center justify-center">
+                    <span className="material-symbols-outlined text-gray-500" style={{ fontSize: '12px' }}>my_location</span>
+                  </div>
+                </div>
+                <p className="font-headline font-bold text-on-surface text-lg leading-tight">
+                  {nextImmediateGoal ? nextImmediateGoal.name : 'Set a Goal'}
+                </p>
+                <p className="text-gray-500 text-xs font-body mt-1">
+                  {nextImmediateGoal
+                    ? `${fmt(nextImmediateGoal.current)} / ${fmt(nextImmediateGoal.target)}`
+                    : 'No active goal'}
+                </p>
               </div>
-              <div className="h-2 bg-surface-container-high rounded-full overflow-hidden">
-                <motion.div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${m.progress}%` }}
-                  transition={{ duration: 1, ease: 'easeOut', delay: 0.6 }}
-                  className={`h-full rounded-full ${m.done ? 'bg-success' : 'bg-primary'}`}
-                />
+              <div>
+                <div className="h-1 bg-surface-container-high rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${nextImmediateGoal ? pct(nextImmediateGoal.current, nextImmediateGoal.target) : 0}%` }}
+                    transition={{ duration: 1, ease: 'easeOut', delay: 0.3 }}
+                    className="h-full bg-primary rounded-full"
+                  />
+                </div>
+              </div>
+            </motion.div>
+          </Link>
+
+          {/* Next Goal */}
+          <Link to="/goals">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-surface border border-outline-variant rounded-2xl p-4 h-36 flex flex-col justify-between hover:border-primary/40 transition-colors"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[9px] font-body font-semibold tracking-widest text-gray-500 uppercase">Next Goal</span>
+                  <span className="material-symbols-outlined text-gray-500" style={{ fontSize: '14px' }}>tune</span>
+                </div>
+                {nextGoal ? (
+                  <>
+                    <span className="inline-block text-[9px] font-body font-bold text-success tracking-wider uppercase mb-1">
+                      {nextGoal.phase}
+                    </span>
+                    <p className="font-headline font-bold text-on-surface text-sm leading-tight">
+                      {nextGoal.name}
+                    </p>
+                    <p className="text-gray-500 text-[10px] font-body mt-1 line-clamp-2">
+                      {nextGoal.description}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-gray-500 text-xs font-body mt-2">All goals complete!</p>
+                )}
+              </div>
+              {nextGoal && (
+                <div className="h-1 bg-surface-container-high rounded-full overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${pct(nextGoal.current, nextGoal.target)}%` }}
+                    transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
+                    className="h-full bg-secondary rounded-full"
+                  />
+                </div>
+              )}
+            </motion.div>
+          </Link>
+        </div>
+
+        {/* Row 2: Net Worth + Ultimate Goal */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Net Worth */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="bg-surface border border-outline-variant rounded-2xl p-4"
+          >
+            <p className="text-[9px] font-body font-semibold tracking-widest text-gray-500 uppercase mb-2">Calculated Net Worth</p>
+            <p className="font-headline font-bold text-on-surface text-3xl">
+              {netWorth < 0 ? '-' : ''}{fmt(Math.abs(netWorth))}
+            </p>
+            <div className="mt-3 space-y-1">
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] font-body text-gray-500 uppercase tracking-wider">Total Assets</span>
+                <span className="text-[11px] font-body font-medium text-success ml-auto">{fmt(totalAssets)}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[9px] font-body text-gray-500 uppercase tracking-wider">Total Debt</span>
+                <span className="text-[11px] font-body font-medium text-error ml-auto">-{fmt(totalLiabilities)}</span>
               </div>
             </div>
-          ))}
+          </motion.div>
+
+          {/* Ultimate Goal */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="bg-surface border border-outline-variant rounded-2xl p-4 flex flex-col justify-between"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="w-8 h-8 rounded-full bg-error/20 flex items-center justify-center">
+                <span className="material-symbols-outlined text-error" style={{ fontSize: '16px' }}>flag</span>
+              </div>
+              <span className="text-[8px] font-body font-bold text-amber-400 uppercase tracking-wider bg-amber-400/10 px-2 py-0.5 rounded-full">
+                The End in Mind
+              </span>
+            </div>
+            <div>
+              <p className="text-[9px] font-body font-semibold tracking-widest text-gray-500 uppercase">Ultimate Goal</p>
+              <p className="font-headline font-bold text-on-surface text-3xl mt-1">
+                {ultimateGoal ? fmt(ultimateGoal.target) : '$20M'}
+              </p>
+              {ultimateGoal && (
+                <div className="mt-2">
+                  <div className="h-1 bg-surface-container-high rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${pct(netWorth, ultimateGoal.target)}%` }}
+                      transition={{ duration: 1.2, ease: 'easeOut', delay: 0.5 }}
+                      className="h-full bg-amber-400 rounded-full"
+                    />
+                  </div>
+                  <p className="text-gray-600 text-[10px] font-body mt-1">
+                    {pct(netWorth, ultimateGoal.target)}% complete
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.div>
         </div>
-      </motion.div>
+
+        {/* Monthly Summary */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="bg-surface border border-outline-variant rounded-2xl p-4"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-body font-semibold text-gray-400 uppercase tracking-wider">Monthly Overview</p>
+            <Link to="/budget" className="text-primary text-xs font-body">View Budget →</Link>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: 'Income', value: fmt(totalIncome, true), color: 'text-success', icon: 'arrow_downward' },
+              { label: 'Spending', value: fmt(totalExpenses, true), color: 'text-error', icon: 'arrow_upward' },
+              { label: 'Saved', value: fmt(Math.max(0, savings), true), color: 'text-primary', icon: 'savings' },
+            ].map(({ label, value, color, icon }) => (
+              <div key={label} className="bg-surface-container rounded-xl p-3 text-center">
+                <span className={`material-symbols-outlined ${color} text-base`}>{icon}</span>
+                <p className={`font-headline font-bold ${color} text-lg mt-1`}>{value}</p>
+                <p className="text-gray-500 text-[9px] font-body uppercase tracking-wider mt-0.5">{label}</p>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Savings Rate */}
+        {totalIncome > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-surface border border-outline-variant rounded-2xl p-4"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-body font-semibold text-gray-400 uppercase tracking-wider">Savings Rate</p>
+              <span className={`text-sm font-headline font-bold ${savingsRate >= 20 ? 'text-success' : savingsRate >= 10 ? 'text-primary' : 'text-error'}`}>
+                {savingsRate}%
+              </span>
+            </div>
+            <div className="h-2 bg-surface-container-high rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${Math.min(100, savingsRate)}%` }}
+                transition={{ duration: 1, ease: 'easeOut', delay: 0.4 }}
+                className={`h-full rounded-full ${savingsRate >= 20 ? 'bg-success' : savingsRate >= 10 ? 'bg-primary' : 'bg-error'}`}
+              />
+            </div>
+            <p className="text-gray-600 text-[10px] font-body mt-1.5">
+              Target: 20%+ for financial freedom
+            </p>
+          </motion.div>
+        )}
+
+        {/* Quick Links */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="grid grid-cols-2 gap-3"
+        >
+          <Link to="/invest">
+            <div className="bg-surface border border-outline-variant rounded-2xl p-4 hover:border-secondary/50 transition-colors">
+              <span className="material-symbols-outlined text-secondary mb-2 text-xl">show_chart</span>
+              <p className="font-headline font-bold text-on-surface text-sm">Investment</p>
+              <p className="text-gray-500 text-[10px] font-body">Projection calculator</p>
+            </div>
+          </Link>
+          <Link to="/tools">
+            <div className="bg-surface border border-outline-variant rounded-2xl p-4 hover:border-primary/50 transition-colors">
+              <span className="material-symbols-outlined text-primary mb-2 text-xl">calculate</span>
+              <p className="font-headline font-bold text-on-surface text-sm">Tax & Mortgage</p>
+              <p className="text-gray-500 text-[10px] font-body">Financial calculators</p>
+            </div>
+          </Link>
+        </motion.div>
+      </div>
     </div>
   )
 }

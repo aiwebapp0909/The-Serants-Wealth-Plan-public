@@ -1,0 +1,427 @@
+ a full-stack modern fintech web app called:
+
+👉 Serants Wealth Plan (SWP)— A Couples Wealth Operating System
+
+This app helps a couple (or more users manage every dollar, eliminate debt, build savings, and reach 20 millions net worth over 40 years (or any other amount they can based on their age & monthly contribution.
+
+🧠 CORE PRODUCT IDEA
+
+This is NOT just a budgeting app.
+
+It is a financial command center that combines:
+
+Budgeting (like Google Sheets)
+
+Net worth tracking (daily updates)
+
+Tax estimation (W2 + 1099)
+
+Mortgage calculator
+
+Investment calculator projections
+
+Goal-based wealth system
+
+⚙️ TECH STACK
+
+Frontend: Next.js (React)
+
+Styling: Tailwind CSS
+
+UI: shadcn/ui
+
+Charts: Recharts
+
+Backend: Firebase (Auth + Firestore)
+
+🏠 MAIN FEATURES
+1. DASHBOARD (Financial Command Center)
+Show:
+
+Net Worth (big, bold)
+
+Monthly change (+$X)
+
+Total Assets vs Liabilities
+
+Cards:
+
+Income (monthly)
+
+Spending (monthly)
+
+Savings
+
+Investments
+
+🔥 CRITICAL: Next Immediate Goal
+
+Show dynamically:
+
+Closest incomplete goal
+
+Example:
+
+Next Goal: Emergency Fund
+$12,400 / $30,000 (41%)
+
+📊 Visuals:
+
+Progress bar toward yearly goal ($30K)
+
+Pie chart:
+
+Spending vs Savings vs Debt
+
+Line chart:
+
+Net worth over time
+
+💸 2. BUDGET (Spreadsheet Style)
+Categories:
+Income
+
+Me
+
+Wife
+
+Add new source
+
+Fixed Bills
+
+Rent
+
+Transportation
+
+Phone
+
+Internet
+
+Utilities
+
+Custom
+
+👉 ALL values:
+
+Stored as negative
+
+Displayed in red
+
+👉 Show:
+
+Total Fixed Bills: -$X (auto-calculated)
+
+Food
+
+Groceries
+
+Eating Out
+
+👉 Also:
+
+Total Food: -$X
+
+Fun Money
+
+You
+
+Wife
+
+Savings
+
+Emergency Fund
+
+Investments
+
+👉 PLUS:
+
+Ability to create custom savings funds
+
+Vacation
+
+Car
+
+House
+
+Any project
+
+Budget Features:
+
+Planned vs Actual vs Remaining
+
+Inline editing (like Notion / Sheets)
+
+Real-time calculations
+
+Color system:
+
+Green (good)
+
+Red (overspending)
+
+🧾 3. TRANSACTIONS
+Table:
+
+Date
+
+Category
+
+Description
+
+Amount
+
+Features:
+
+Add transaction
+
+Auto category linking
+
+Search + filters
+
+👉 Transactions power:
+
+Budget
+
+Net worth
+
+Analytics
+
+📊 4. ANALYTICS
+Charts:
+
+Pie:
+
+Spending vs Savings vs Debt
+
+Bar:
+
+Category breakdown
+
+Line:
+
+Net worth growth
+
+🧠 5. NET WORTH ENGINE
+Formula:
+Net Worth = Assets − Liabilities
+
+Assets:
+
+Cash
+
+Investments
+
+Real estate
+
+Vehicles
+
+Other
+
+Liabilities:
+
+Credit cards
+
+Loans
+
+Mortgage
+
+Other debt
+
+DAILY TRACKING
+
+Store snapshots:
+
+{
+  date,
+  netWorth,
+  assets,
+  liabilities
+}
+
+
+👉 Enables:
+
+Growth chart
+
+Monthly gains
+
+$500K → $20M tracking
+
+💰 6. TAX ESTIMATOR (W2 + 1099)
+Input:
+
+Income
+
+Type: W2 or 1099
+
+Output:
+
+Federal tax
+
+State tax
+
+Self-employment tax (1099 only)
+
+Total tax
+
+Net income
+
+Effective rate
+
+Logic:
+Tax = Federal + State + (Self-Employment if 1099)
+
+🏠 7. MORTGAGE CALCULATOR
+Input:
+
+Home price / loan
+
+Interest rate
+
+Years
+
+Output:
+
+Monthly payment
+
+Total paid
+
+Total interest
+
+Formula:
+M = P × [ r(1+r)^n ] / [(1+r)^n − 1]
+
+🎯 8. GOALS SYSTEM (CRITICAL FEATURE)
+Default Goals:
+Year 1
+
+$0 Debt
+
+$30K Emergency Fund
+
+Insurance setup
+
+Year 2+
+
+Invest $2,500/month
+
+Year 7
+
+$500K Net Worth
+
+Buy a house
+
+Year 40
+
+$20M Net Worth
+
+Features:
+
+Add custom goals (+ button)
+
+Progress tracking
+
+Completion %
+
+🧠 Goal Structure:
+{
+  id,
+  name,
+  target,
+  current,
+  deadline
+}
+
+🧠 9. INVESTMENT PROJECTION
+Controls:
+
+Monthly investment ($2K–$5K)
+
+Return rate (5–12%)
+
+Time (1–40 years)
+
+Output:
+
+Total invested
+
+Total returns
+
+Final value
+
+👉 Highlight:
+
+$20M projection
+
+🎨 DESIGN SYSTEM
+Style:
+
+Dark mode (default)
+
+Minimal, premium fintech feel
+
+Colors:
+
+Background: #0B0B0F
+
+Cards: #15151C
+
+Accent: Blue → Purple gradient
+
+Red: expenses
+
+Green: growth
+
+UI:
+
+Rounded corners (20px)
+
+Glassmorphism
+
+Smooth animations
+
+⚡ ADVANCED FEATURES
+
+Couple sync (shared data)
+
+Weekly “money check-in”
+
+Financial health score (0–100)
+
+AI insights:
+
+“You can invest $300 more”
+
+🔥 FINAL EXPERIENCE
+
+The app should feel like:
+
+👉 “If we follow this, we WILL become wealthy.”
+
+🚀 OUTPUT REQUIREMENTS
+
+Fully working app
+
+Clean architecture
+
+Reusable components
+
+Mobile + desktop responsive
+
+Real financial calculations (not fake UI)
+
+
+Firebase integration
+
+Real-time sync between wife & husband
+
+Authentication
+
+
+API (OpenAI, Plaid to track every expense, & savings account, then investment eventually)
+
+Full API routes
+
+Full step-by-step build plan (deployable)
+
+Also “Build backend + database ” accessible by husband & wife
