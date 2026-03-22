@@ -56,24 +56,32 @@ export function AuthProvider({ children }) {
 
   // 2. HOUSEHOLD ACTIONS (Google Login Only Core)
   const createHousehold = async (name, passcode) => {
-    if (!user) return
-    const householdId = `H-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
-    const salt = bcrypt.genSaltSync(10)
-    const passcodeHash = bcrypt.hashSync(passcode, salt)
+    if (!user) throw new Error('Authorization required to create a household.')
     
-    // Create Household Doc
-    await setDoc(doc(db, 'households', householdId), {
-      id: householdId,
-      name: name || `${user.displayName}'s Family`,
-      passcodeHash,
-      members: [user.uid],
-      createdAt: new Date().toISOString()
-    })
+    try {
+      const householdId = `H-${Math.random().toString(36).substring(2, 9).toUpperCase()}`
+      const salt = bcrypt.genSaltSync(10)
+      const passcodeHash = bcrypt.hashSync(passcode, salt)
+      
+      console.log('Generating Household:', householdId)
 
-    // Attach User to Household
-    await updateDoc(doc(db, 'users', user.uid), { householdId })
-    setUserProfile(prev => ({ ...prev, householdId }))
-    return householdId
+      // Create Household Doc
+      await setDoc(doc(db, 'households', householdId), {
+        id: householdId,
+        name: name || `${user.displayName}'s Family`,
+        passcodeHash,
+        members: [user.uid],
+        createdAt: new Date().toISOString()
+      })
+
+      // Attach User to Household
+      await updateDoc(doc(db, 'users', user.uid), { householdId })
+      setUserProfile(prev => ({ ...prev, householdId }))
+      return householdId
+    } catch (error) {
+      console.error('Final Creation Failure:', error)
+      throw new Error(`Database error: ${error.message}`)
+    }
   }
 
   const joinHousehold = async (householdId, passcode) => {
