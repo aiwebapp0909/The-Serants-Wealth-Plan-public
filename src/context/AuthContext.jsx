@@ -21,33 +21,48 @@ export function AuthProvider({ children }) {
       return
     }
 
+    let snapshotResolved = false
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser)
       
       if (firebaseUser) {
-        // Fetch or create user profile in Firestore
-        const docRef = doc(db, 'users', firebaseUser.uid)
-        const docSnap = await getDoc(docRef)
-        
-        if (docSnap.exists()) {
-          setUserProfile(docSnap.data())
-        } else {
-          const newProfile = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            groupId: null, // For couple sync
-            createdAt: new Date().toISOString()
+        // Create a failsafe to not block the app forever if Firestore is slow
+        const profileTimeout = setTimeout(() => {
+          if (!snapshotResolved) {
+             console.warn('Firestore profile fetch timed out. Proceeding with basic user info.')
+             setLoading(false)
           }
-          await setDoc(docRef, newProfile)
-          setUserProfile(newProfile)
+        }, 2000)
+
+        try {
+          const docRef = doc(db, 'users', firebaseUser.uid)
+          const docSnap = await getDoc(docRef)
+          
+          if (docSnap.exists()) {
+            setUserProfile(docSnap.data())
+          } else {
+            const newProfile = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              groupId: null,
+              createdAt: new Date().toISOString()
+            }
+            await setDoc(docRef, newProfile)
+            setUserProfile(newProfile)
+          }
+        } catch (e) {
+          console.error('Error fetching user profile:', e)
+        } finally {
+           snapshotResolved = true
+           clearTimeout(profileTimeout)
+           setLoading(false)
         }
       } else {
         setUserProfile(null)
+        setLoading(false)
       }
-      
-      setLoading(false)
     })
 
     return () => unsubscribe()
