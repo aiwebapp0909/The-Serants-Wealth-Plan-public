@@ -1,7 +1,9 @@
-# Serants Wealth Plan (SWP) — A Couples Wealth Operating System
+# Serants Wealth Plan (SWP) — Personal Wealth Operating System
 
 ## Overview
-A full-stack luxury dark-themed fintech web app for couples to manage every dollar, eliminate debt, build savings, and track their path to $20M net worth. Built with React + Vite + Tailwind + Firebase.
+A full-stack luxury dark-themed fintech web app to manage every dollar, eliminate debt, build savings, and track your path to $20M net worth. Built with React + Vite + Tailwind + Firebase.
+
+All data is tied securely to your Google account.
 
 ## Tech Stack
 - **Framework:** React 18 + Vite 5

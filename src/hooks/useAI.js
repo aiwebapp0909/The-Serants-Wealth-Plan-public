@@ -15,7 +15,7 @@ export function useAI() {
     setLoading(true)
     try {
       const prompt = `
-        As a world-class financial coach for the "Serants Wealth Plan", analyze this couple's data and provide ONE punchy, actionable, and encouraging insight (max 40 words).
+        As a world-class financial coach for the "Serants Wealth Plan", analyze this user's data and provide ONE punchy, actionable, and encouraging insight (max 40 words).
         
         Data:
         - Net Worth: $${financialData.netWorth}

@@ -14,7 +14,7 @@ export default function Login() {
         {/* Logo & Headline */}
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-16 relative">
           <div className="mx-auto w-24 h-24 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center shadow-xl shadow-amber-500/20 mb-8 relative">
-             <span className="material-symbols-outlined text-background text-5xl font-bold">handshake</span>
+             <span className="material-symbols-outlined text-background text-5xl font-bold">trending_up</span>
              <div className="absolute -top-3 -right-3">
                 <span className="material-symbols-outlined text-amber-500 text-3xl animate-pulse">star</span>
              </div>
@@ -23,13 +23,13 @@ export default function Login() {
             SERANT WEALTH <span className="text-amber-500">PLAN</span>
           </h1>
           <p className="text-gray-400 text-sm font-body px-8 font-medium italic">
-            A Couple’s Financial Operating System. Reaching $20M net worth, together.
+            Your personal financial operating system. Build your path to $20M net worth.
           </p>
         </motion.div>
 
         <div className="bg-surface border border-outline-variant rounded-3xl p-8 shadow-2xl space-y-6">
           <p className="text-on-surface font-body text-sm font-medium">
-            Join the journey to $20M net worth.
+            Connected to your account.
           </p>
 
           <button
@@ -43,7 +43,7 @@ export default function Login() {
 
           <div className="pt-4 border-t border-outline-variant/40">
             <p className="text-[10px] text-gray-600 font-body uppercase tracking-widest leading-relaxed">
-              Secure couple syncing • Encrypted data • Real-time tracking
+              Secure authentication • Encrypted data • Real-time tracking
             </p>
           </div>
         </div>

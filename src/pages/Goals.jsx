@@ -121,7 +121,7 @@ export default function Goals() {
       <div className="flex items-start justify-between mb-6 px-5">
         <div>
           <h1 className="font-headline font-bold text-on-surface text-3xl">Wealth Roadmap</h1>
-          <p className="text-gray-500 text-xs font-body mt-1.5">Click any goal to mark it as completed.<br/>This checklist syncs universally.</p>
+          <p className="text-gray-500 text-xs font-body mt-1.5">Click any goal to update progress.<br/>All changes save automatically.</p>
         </div>
         {/* Progress Ring */}
         <div className="relative w-16 h-16 flex-shrink-0">

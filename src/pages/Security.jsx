@@ -3,24 +3,25 @@ import { useAuth } from '../context/AuthContext'
 import { useState, useEffect } from 'react'
 
 export default function Security() {
-  const { userProfile, deviceId, passcodeSession, logout } = useAuth()
+  const { user, logout } = useAuth()
   const [logs, setLogs] = useState([])
 
   // Simulated Audit Logs (In production, these come from Firestore auditLogs collection)
   useEffect(() => {
+    const deviceId = `${navigator.userAgent.split(' ').pop()}`
     setLogs([
-      { id: 1, action: 'LOGIN_SUCCESS', device: deviceId, time: '2 mins ago', status: 'secure' },
-      { id: 2, action: 'HOUSEHOLD_SYNC', device: 'LAPTOP-S12', time: '1 hour ago', status: 'secure' },
-      { id: 3, action: 'SENSITIVE_VIEW', device: deviceId, time: '1 hour ago', status: 'mfa_verified' },
+      { id: 1, action: 'LOGIN_SUCCESS', device: 'Current Device', time: '2 mins ago', status: 'secure' },
+      { id: 2, action: 'DATA_SYNC', device: 'Current Device', time: '1 hour ago', status: 'secure' },
+      { id: 3, action: 'SENSITIVE_VIEW', device: 'Current Device', time: '1 hour ago', status: 'mfa_verified' },
     ])
-  }, [deviceId])
+  }, [])
 
   return (
     <div className="bg-background min-h-screen px-4 pt-6 pb-24">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="font-headline font-bold text-on-surface text-3xl">Security</h1>
-          <p className="text-gray-500 text-xs font-body mt-1">Fintech-grade protection active</p>
+          <p className="text-gray-500 text-xs font-body mt-1">Google-protected account</p>
         </div>
         <div className="w-12 h-12 rounded-full bg-success/10 flex items-center justify-center border border-success/20">
           <span className="material-symbols-outlined text-success">verified_user</span>
@@ -33,42 +34,26 @@ export default function Security() {
           <div className="flex items-center justify-between mb-4">
              <div className="flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">key</span>
-                <p className="text-sm font-headline font-bold">Passcode Session</p>
+                <p className="text-sm font-headline font-bold">Google Sign-In</p>
              </div>
-             <span className={`text-[10px] font-body font-bold px-2 py-0.5 rounded-full ${passcodeSession.verified ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}>
-               {passcodeSession.verified ? 'ACTIVE' : 'EXPIRED'}
+             <span className="text-[10px] font-body font-bold px-2 py-0.5 rounded-full bg-success/10 text-success">
+               ACTIVE
              </span>
           </div>
-          {passcodeSession.verified ? (
-            <p className="text-xs text-gray-500 font-body">Session expires automatically in 10 minutes or after 15 minutes of inactivity.</p>
-          ) : (
-            <p className="text-xs text-gray-500 font-body">Re-enter your household passcode to view sensitive financial data.</p>
-          )}
+          <p className="text-xs text-gray-500 font-body">Your session is secured by Google Authentication. Sign in again if accessing from a new device.</p>
         </div>
 
-        {/* DEVICE BINDING */}
+        {/* ACCOUNT INFO */}
         <div className="bg-surface border border-outline-variant rounded-3xl p-5 shadow-sm">
-           <h3 className="text-[10px] font-body font-bold text-gray-400 uppercase tracking-widest mb-4">Trusted Devices</h3>
+           <h3 className="text-[10px] font-body font-bold text-gray-400 uppercase tracking-widest mb-4">Account Information</h3>
            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-gray-400">smartphone</span>
-                    <div>
-                       <p className="text-xs font-headline font-bold text-on-surface">{deviceId}</p>
-                       <p className="text-[9px] font-body text-success font-bold uppercase">Current Device</p>
-                    </div>
-                 </div>
-                 <span className="material-symbols-outlined text-success text-sm">check_circle</span>
+              <div className="bg-surface-container rounded-2xl p-4">
+                 <p className="text-[9px] font-body text-gray-500 uppercase tracking-widest mb-1">Email</p>
+                 <p className="text-xs font-headline font-bold text-on-surface break-all">{user?.email || 'Not available'}</p>
               </div>
-              <div className="flex items-center justify-between opacity-50">
-                 <div className="flex items-center gap-3">
-                    <span className="material-symbols-outlined text-gray-400">laptop</span>
-                    <div>
-                       <p className="text-xs font-headline font-bold text-on-surface">LAPTOP-S12</p>
-                       <p className="text-[9px] font-body text-gray-500 uppercase">Last seen: 1 hour ago</p>
-                    </div>
-                 </div>
-                 <button className="text-[9px] font-body font-bold text-error uppercase">Revoke</button>
+              <div className="bg-surface-container rounded-2xl p-4">
+                 <p className="text-[9px] font-body text-gray-500 uppercase tracking-widest mb-1">User ID</p>
+                 <p className="text-[10px] font-mono text-gray-400 break-all">{user?.uid || 'Not available'}</p>
               </div>
            </div>
         </div>

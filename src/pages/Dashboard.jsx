@@ -24,12 +24,12 @@ export default function Dashboard() {
     healthScore, unassigned
   } = useApp()
   
-  const { userProfile, user, logout } = useAuth()
+  const { user, logout } = useAuth()
   const { insight, loading: aiLoading, generateInsight } = useAI()
   const [showSyncModal, setShowSyncModal] = useState(false)
 
   useEffect(() => {
-    if (userProfile && !insight && !aiLoading) {
+    if (user && !insight && !aiLoading) {
       generateInsight({
         netWorth: Math.abs(netWorth),
         income: totalIncome,
@@ -39,7 +39,7 @@ export default function Dashboard() {
         nextGoal: nextImmediateGoal?.name || 'Emergency Fund'
       })
     }
-  }, [userProfile, netWorth, totalIncome, totalExpenses, healthScore, nextImmediateGoal])
+  }, [user, netWorth, totalIncome, totalExpenses, healthScore, nextImmediateGoal])
 
   return (
     <div className="bg-background min-h-screen">
@@ -68,7 +68,7 @@ export default function Dashboard() {
             className="flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs font-body font-bold transition-all bg-success/10 border-success/40 text-success"
           >
             <span className="text-success text-[10px]">●</span>
-            {userProfile?.householdId || 'Syncing...'}
+            Connected
           </button>
         </div>
       </div>
@@ -187,25 +187,25 @@ export default function Dashboard() {
         </motion.div>
       </div>
 
-      {/* HOUSEHOLD INFO MODAL */}
+      {/* ACCOUNT INFO MODAL */}
       <AnimatePresence>
         {showSyncModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSyncModal(false)} className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-sm bg-surface border border-outline-variant rounded-3xl p-6 shadow-2xl">
-              <h2 className="font-headline font-bold text-on-surface text-xl mb-6 text-center">Household Status</h2>
+              <h2 className="font-headline font-bold text-on-surface text-xl mb-6 text-center">Account Status</h2>
               <div className="space-y-4">
                 <div className="bg-surface-container p-5 rounded-2xl border border-outline-variant">
-                  <p className="text-[10px] font-body text-gray-500 uppercase tracking-widest mb-1">Active Household ID</p>
-                  <p className="font-headline font-bold text-primary text-2xl tracking-widest">{userProfile?.householdId}</p>
-                </div>
-                <div className="bg-surface-container p-5 rounded-2xl">
                   <p className="text-[10px] font-body text-gray-500 uppercase tracking-widest mb-1">Logged In As</p>
-                  <p className="font-headline font-bold text-on-surface text-sm uppercase">{user?.email}</p>
+                  <p className="font-headline font-bold text-primary text-sm tracking-wide">{user?.email}</p>
                 </div>
-                <p className="text-[10px] text-gray-500 text-center font-body uppercase tracking-wider px-2">Data is perfectly in sync with your partner.</p>
+                <div className="bg-surface-container p-5 rounded-2xl border border-outline-variant">
+                  <p className="text-[10px] font-body text-gray-500 uppercase tracking-widest mb-1">User ID</p>
+                  <p className="font-mono text-xs text-gray-400 break-all">{user?.uid}</p>
+                </div>
+                <p className="text-[10px] text-gray-500 text-center font-body uppercase tracking-wider px-2">All data is secure and tied to your account.</p>
                 <div className="flex gap-2 pt-4">
-                   <button onClick={() => setShowSyncModal(false)} className="flex-2 bg-surface-container border border-outline-variant rounded-xl py-4 text-xs font-bold font-headline">CLOSE</button>
+                   <button onClick={() => setShowSyncModal(false)} className="flex-1 bg-surface-container border border-outline-variant rounded-xl py-4 text-xs font-bold font-headline">CLOSE</button>
                    <button onClick={logout} className="flex-1 bg-error/10 border border-error/20 text-error rounded-xl py-4 text-xs font-bold font-headline">LOGOUT</button>
                 </div>
               </div>

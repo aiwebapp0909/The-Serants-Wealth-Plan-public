@@ -7,28 +7,37 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
-    // 🛡️ HOUSEHOLD DATA (MEMBER-ONLY)
-    match /households/{householdId} {
-      allow read: if request.auth != null && 
-        request.auth.uid in resource.data.members;
-      
-      allow create: if request.auth != null;
-      
-      allow update: if request.auth != null && 
-        (request.auth.uid in resource.data.members || 
-         request.auth.uid in get(/databases/$(database)/documents/households/$(householdId)).data.members);
+    // 🛡️ USER DATA (BUDGETS, GOALS, TRANSACTIONS, NET WORTH)
+    // All collections use userId for access control
+    match /budgets/{budgetId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
     }
 
-    // 🛡️ SHARED SCOPED DATA (BUDGETS, TRANSACTIONS, GOALS)
-    // Every document in these collections MUST have a 'householdId' field
-    match /{collection}/{docId} {
+    match /userData/{userId} {
       allow read, write: if request.auth != null && 
-        exists(/databases/$(database)/documents/households/$(resource.data.householdId)) &&
-        request.auth.uid in get(/databases/$(database)/documents/households/$(resource.data.householdId)).data.members;
-        
-      // Allow creation if the linked household allows it
+        request.auth.uid == userId;
+    }
+
+    match /transactions/{transactionId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
       allow create: if request.auth != null && 
-        request.auth.uid in get(/databases/$(database)/documents/households/$(request.resource.data.householdId)).data.members;
+        request.auth.uid == request.resource.data.userId;
+    }
+
+    match /netWorthSnapshots/{snapshotId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+    }
+
+    match /insights/{userId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == userId;
     }
   }
 }
