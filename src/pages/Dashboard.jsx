@@ -4,6 +4,8 @@ import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import { useAI } from '../hooks/useAI'
 import { useState, useEffect } from 'react'
+import CoachChat from '../components/CoachChat'
+import WealthProjection from '../components/WealthProjection'
 
 function fmt(n) {
   if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
@@ -27,6 +29,7 @@ export default function Dashboard() {
   const { user, logout } = useAuth()
   const { insight, loading: aiLoading, generateInsight } = useAI()
   const [showSyncModal, setShowSyncModal] = useState(false)
+  const [showCoachChat, setShowCoachChat] = useState(false)
 
   useEffect(() => {
     if (user && !insight && !aiLoading) {
@@ -171,19 +174,34 @@ export default function Dashboard() {
               <motion.div initial={{ width: 0 }} animate={{ width: `${pct(netWorth, ultimateGoal?.target)}%` }} className="h-full bg-primary rounded-full" />
            </div>
         </div>
+WEALTH PROJECTION */}
+        <WealthProjection 
+          totalInvesting={totalInvesting} 
+          netWorth={netWorth}
+          totalSavings={totalSavings}
+        />
 
-        {/* ROW 4: COACH INSIGHT */}
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-primary/5 border border-primary/20 rounded-2xl p-4 flex gap-4">
+        {/* ROW 5: COACH INSIGHT (CLICKABLE) */}
+        <motion.button 
+          onClick={() => setShowCoachChat(true)}
+          initial={{ opacity: 0, scale: 0.95 }} 
+          animate={{ opacity: 1, scale: 1 }} 
+          className="w-full bg-primary/5 border border-primary/20 rounded-2xl p-4 flex gap-4 hover:border-primary/40 hover:bg-primary/10 transition-all active:scale-[0.98]"
+        >
           <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
             <span className="material-symbols-outlined text-primary text-xl">psychology</span>
           </div>
-          <div className="flex-1">
+          <div className="flex-1 text-left">
              <div className="flex items-center justify-between mb-1">
                 <p className="text-[9px] font-body font-bold text-primary uppercase tracking-widest">Coach Insight</p>
                 {aiLoading && <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />}
              </div>
-             <p className="text-xs font-body text-on-surface/80 italic leading-relaxed">"{insight || 'Synthesizing your path to freedom...'}"</p>
+             <p className="text-xs font-body text-on-surface/80 italic leading-relaxed text-left">"{insight || 'Synthesizing your path to freedom...'}"</p>
           </div>
+          <div className="flex items-center justify-center">
+            <span className="material-symbols-outlined text-primary/60">chevron_right</span>
+          </div>
+        </motion.button
         </motion.div>
       </div>
 
@@ -213,6 +231,21 @@ export default function Dashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Coach Chat Modal */}
+      <CoachChat 
+        isOpen={showCoachChat}
+        onClose={() => setShowCoachChat(false)}
+        financialData={{
+          income: totalIncome,
+          expenses: totalExpenses,
+          savings: totalSavings,
+          investing: totalInvesting,
+          netWorth: netWorth,
+          healthScore: healthScore
+        }}
+        userId={user?.uid}
+      />
     </div>
   )
 }
