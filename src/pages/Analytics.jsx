@@ -57,14 +57,16 @@ export default function Analytics() {
   }, [budget])
 
   const categoryBar = useMemo(() => {
+    const s = (arr) => arr || []
     return [
-      { name: 'Income', planned: budget.income.reduce((s, i) => s + Number(i.planned || 0), 0), actual: budget.income.reduce((s, i) => s + Number(i.actual || 0), 0) },
-      { name: 'Bills', planned: budget.fixedBills.reduce((s, i) => s + Number(i.planned || 0), 0), actual: budget.fixedBills.reduce((s, i) => s + Number(i.actual || 0), 0) },
-      { name: 'Food', planned: budget.food.reduce((s, i) => s + Number(i.planned || 0), 0), actual: budget.food.reduce((s, i) => s + Number(i.actual || 0), 0) },
-      { name: 'Savings', planned: budget.savings.reduce((s, i) => s + Number(i.planned || 0), 0), actual: budget.savings.reduce((s, i) => s + Number(i.actual || 0), 0) },
-      { name: 'Invest', planned: budget.investing.reduce((s, i) => s + Number(i.planned || 0), 0), actual: budget.investing.reduce((s, i) => s + Number(i.actual || 0), 0) },
+      { name: 'Income',  planned: s(budget.income).reduce((a, i) => a + Number(i.planned || 0), 0),    actual: s(budget.income).reduce((a, i) => a + Number(i.actual || 0), 0) },
+      { name: 'Bills',   planned: s(budget.fixedBills).reduce((a, i) => a + Number(i.planned || 0), 0), actual: s(budget.fixedBills).reduce((a, i) => a + Number(i.actual || 0), 0) },
+      { name: 'Food',    planned: s(budget.food).reduce((a, i) => a + Number(i.planned || 0), 0),       actual: s(budget.food).reduce((a, i) => a + Number(i.actual || 0), 0) },
+      { name: 'Savings', planned: s(budget.savings).reduce((a, i) => a + Number(i.planned || 0), 0),    actual: s(budget.savings).reduce((a, i) => a + Number(i.actual || 0), 0) },
+      { name: 'Invest',  planned: s(budget.investing).reduce((a, i) => a + Number(i.planned || 0), 0),  actual: s(budget.investing).reduce((a, i) => a + Number(i.actual || 0), 0) },
     ]
   }, [budget])
+
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null

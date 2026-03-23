@@ -1,6 +1,11 @@
-import { useState, useMemo, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useMemo } from 'react'
+import { motion } from 'framer-motion'
 import { useApp } from '../context/AppContext'
+
+function pct(current, target) {
+  if (!target || target === 0) return 0
+  return Math.min(100, Math.round((current / target) * 100))
+}
 
 function fmt(n) {
   if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
@@ -8,247 +13,149 @@ function fmt(n) {
   return `$${n.toLocaleString()}`
 }
 
-function pct(current, target) {
-  if (!target || target === 0) return 0
-  return Math.min(100, Math.round((current / target) * 100))
+const PHASE_META = {
+  1: { label: 'FOUNDATION',   color: 'text-emerald-400', border: 'border-emerald-500/40', bg: 'bg-emerald-950/60',  dot: 'bg-emerald-500', icon: 'savings' },
+  2: { label: 'ACCELERATION', color: 'text-amber-400',   border: 'border-amber-500/40',   bg: 'bg-amber-950/60',   dot: 'bg-amber-500',   icon: 'trending_up' },
+  3: { label: 'ACCUMULATION', color: 'text-blue-400',    border: 'border-blue-500/40',    bg: 'bg-blue-950/60',    dot: 'bg-blue-500',    icon: 'home' },
+  4: { label: 'LIBERATION',   color: 'text-red-400',     border: 'border-red-500/40',     bg: 'bg-red-950/60',     dot: 'bg-red-500',     icon: 'flag' },
 }
 
-function GoalCheckpoint({ goal, onUpdate, onRemove, status }) {
-  const [editing, setEditing] = useState(false)
+const PHASE_NAMES = ['Financial Stability', 'Wealth Building', 'Family + Assets', 'Financial Freedom']
+
+function GoalRow({ goal, onToggle }) {
+  const done = goal.current >= goal.target
   const progress = pct(goal.current, goal.target)
 
-  const getStatusIcon = () => {
-    if (progress >= 100) return 'check_circle'
-    if (status === 'locked') return 'lock'
-    return 'pending'
-  }
+  return (
+    <button
+      onClick={() => onToggle(goal.id, done ? 0 : goal.target)}
+      className="w-full flex items-start gap-3 p-3 rounded-2xl bg-black/20 hover:bg-black/30 active:scale-[0.99] transition-all text-left group"
+    >
+      <div className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${done ? 'bg-primary border-primary' : 'border-gray-600 group-hover:border-gray-400'}`}>
+        {done && <span className="material-symbols-outlined text-background font-bold" style={{ fontSize: '12px' }}>check</span>}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-sm font-headline font-bold truncate transition-colors ${done ? 'line-through text-gray-500' : 'text-on-surface'}`}>
+          {goal.name}
+        </p>
+        {goal.description && (
+          <p className="text-[11px] font-body text-gray-500 mt-0.5 leading-snug line-clamp-2">{goal.description}</p>
+        )}
+        {!done && goal.target > 1 && (
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex-1 h-0.5 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-full bg-primary/50 rounded-full" style={{ width: `${progress}%` }} />
+            </div>
+            <span className="text-[9px] font-body text-gray-600">{fmt(goal.current)} / {fmt(goal.target)}</span>
+          </div>
+        )}
+      </div>
+    </button>
+  )
+}
 
-  const getStatusColor = () => {
-    if (progress >= 100) return 'text-success'
-    if (status === 'locked') return 'text-gray-600'
-    return 'text-primary'
-  }
+function PhaseCard({ phaseNum, goals, onToggle, index }) {
+  const meta = PHASE_META[phaseNum]
+  const completedCount = goals.filter(g => g.current >= g.target).length
+  const progress = goals.length > 0 ? Math.round((completedCount / goals.length) * 100) : 0
 
   return (
-    <div className={`min-w-[280px] snap-center p-1`}>
-      <motion.div
-        layout
-        className={`bg-surface border rounded-3xl p-5 h-full flex flex-col justify-between ${
-          status === 'locked' ? 'opacity-60 grayscale' : 'shadow-lg shadow-black/5'
-        } ${progress >= 100 ? 'border-success/40' : 'border-outline-variant'}`}
-      >
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.08 }}
+      className={`border-2 ${meta.border} ${meta.bg} rounded-[28px] overflow-hidden flex-shrink-0 w-[82vw] max-w-[360px] snap-center`}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-3">
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <span className={`material-symbols-outlined ${getStatusColor()}`}>{getStatusIcon()}</span>
-            <div className="flex gap-2">
-              <button onClick={() => setEditing(!editing)} className="text-gray-500 hover:text-primary transition-colors">
-                <span className="material-symbols-outlined text-sm">edit</span>
-              </button>
-              {!goal.isUltimate && (
-                <button onClick={() => onRemove(goal.id)} className="text-gray-500 hover:text-error transition-colors">
-                  <span className="material-symbols-outlined text-sm">delete</span>
-                </button>
-              )}
-            </div>
-          </div>
-          
-          <h3 className="font-headline font-bold text-on-surface text-base mb-1">{goal.name}</h3>
-          <p className="text-gray-600 text-[11px] font-body line-clamp-3 mb-4">{goal.description}</p>
+          <p className={`text-[9px] font-body font-bold uppercase tracking-[0.2em] ${meta.color} mb-1`}>{meta.label}</p>
+          <h3 className="font-headline font-bold text-on-surface text-lg leading-tight">
+            Phase {phaseNum}: {PHASE_NAMES[phaseNum - 1]}
+          </h3>
         </div>
-
-        <div>
-          <div className="flex justify-between items-end mb-1.5">
-            <div className="text-[10px] font-body text-gray-400 uppercase tracking-widest">Progress</div>
-            <div className={`text-xs font-headline font-bold ${progress >= 100 ? 'text-success' : 'text-primary'}`}>{progress}%</div>
-          </div>
-          <div className="h-1.5 bg-surface-container-high rounded-full overflow-hidden mb-3">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${progress}%` }}
-              className={`h-full rounded-full ${progress >= 100 ? 'bg-success' : 'bg-primary'}`}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-body text-on-surface font-semibold">{fmt(goal.current)}</span>
-            <span className="text-[10px] font-body text-gray-500">Target: {fmt(goal.target)}</span>
-          </div>
+        <div className={`px-3 py-1.5 rounded-full text-[10px] font-body font-bold ${progress >= 100 ? 'bg-success/20 text-success' : 'bg-white/5 text-gray-400'}`}>
+          {progress}%
         </div>
+      </div>
 
-        <AnimatePresence>
-          {editing && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="mt-4 border-t border-outline-variant pt-4 space-y-3"
-            >
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[9px] font-body text-gray-500 uppercase">Current</label>
-                  <input
-                    type="number"
-                    value={goal.current}
-                    onChange={e => onUpdate(goal.id, 'current', e.target.value)}
-                    className="w-full bg-surface-container border border-outline-variant rounded-xl px-2 py-1.5 text-xs font-body text-on-surface outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[9px] font-body text-gray-500 uppercase">Target</label>
-                  <input
-                    type="number"
-                    value={goal.target}
-                    onChange={e => onUpdate(goal.id, 'target', e.target.value)}
-                    className="w-full bg-surface-container border border-outline-variant rounded-xl px-2 py-1.5 text-xs font-body text-on-surface outline-none"
-                  />
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
-    </div>
+      {/* Goals */}
+      <div className="px-3 pb-4 space-y-2">
+        {goals.map(goal => (
+          <GoalRow key={goal.id} goal={goal} onToggle={onToggle} />
+        ))}
+        {goals.length === 0 && (
+          <p className="text-center text-gray-600 text-xs font-body py-4 italic">No goals for this phase yet.</p>
+        )}
+      </div>
+    </motion.div>
   )
 }
 
 export default function Goals() {
-  const { goals, updateGoal, addGoal, removeGoal, netWorth } = useApp()
-  const [showAddModal, setShowAddModal] = useState(false)
-  const [newGoal, setNewGoal] = useState({ name: '', target: '', current: '', deadline: '', phase: '🟢 PHASE 1: FINANCIAL STABILITY', description: '' })
-  
-  const timelineRef = useRef(null)
+  const { goals, updateGoal } = useApp()
 
   const phases = useMemo(() => {
-    const grouped = goals.reduce((acc, g) => {
-      const key = g.phase || 'Custom'
-      if (!acc[key]) acc[key] = { name: key, goals: [], progress: 0 }
-      acc[key].goals.push(g)
-      return acc
-    }, {})
-
-    return Object.values(grouped).map(p => {
-      const totalProgress = p.goals.reduce((sum, g) => sum + pct(g.current, g.target), 0)
-      p.progress = Math.round(totalProgress / p.goals.length)
-      return p
-    }).sort((a, b) => {
-      const getOrder = (name) => {
-        const match = name.match(/PHASE (\d+)/i)
-        return match ? parseInt(match[1]) : 999
-      }
-      return getOrder(a.name) - getOrder(b.name)
+    const grouped = { 1: [], 2: [], 3: [], 4: [] }
+    goals.forEach(g => {
+      const match = (g.phase || '').match(/(\d+)/)
+      const num = match ? Math.min(4, Math.max(1, parseInt(match[1]))) : 1
+      grouped[num].push(g)
     })
+    return grouped
   }, [goals])
 
-  const wealthScore = useMemo(() => {
-    const totalGoals = goals.filter(g => !g.isUltimate)
-    if (totalGoals.length === 0) return 0
-    const overallProgress = totalGoals.reduce((sum, g) => sum + pct(g.current, g.target), 0)
-    return Math.round(overallProgress / totalGoals.length)
+  const overallProgress = useMemo(() => {
+    const all = goals.filter(g => !g.isUltimate)
+    if (!all.length) return 0
+    return Math.round(all.reduce((s, g) => s + pct(g.current, g.target), 0) / all.length)
   }, [goals])
 
-  const handleAdd = () => {
-    if (!newGoal.name || !newGoal.target) return
-    addGoal({ ...newGoal, target: Number(newGoal.target), current: Number(newGoal.current) || 0 })
-    setShowAddModal(false)
+  const handleToggle = (id, newValue) => {
+    updateGoal(id, 'current', newValue)
   }
 
   return (
-    <div className="bg-background min-h-screen px-4 pt-6 pb-24 overflow-x-hidden">
+    <div className="bg-background min-h-screen pt-6 pb-32">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-start justify-between mb-6 px-5">
         <div>
-          <h1 className="font-headline font-bold text-on-surface text-3xl">Wealth Plan</h1>
-          <p className="text-gray-500 text-xs font-body mt-1">Journey to $20,000,000 Net Worth</p>
+          <h1 className="font-headline font-bold text-on-surface text-3xl">Wealth Roadmap</h1>
+          <p className="text-gray-500 text-xs font-body mt-1.5">Click any goal to mark it as completed.<br/>This checklist syncs universally.</p>
         </div>
-        <div className="text-right">
-          <p className="font-headline font-bold text-primary text-3xl">{wealthScore}%</p>
-          <p className="text-[9px] font-body text-gray-500 uppercase tracking-widest font-bold">Plan Score</p>
+        {/* Progress Ring */}
+        <div className="relative w-16 h-16 flex-shrink-0">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="currentColor" strokeWidth="5" className="text-surface-container" />
+            <motion.circle
+              cx="32" cy="32" r="26" fill="none" stroke="currentColor" strokeWidth="5"
+              className="text-primary"
+              strokeDasharray="163.4"
+              initial={{ strokeDashoffset: 163.4 }}
+              animate={{ strokeDashoffset: 163.4 - (163.4 * overallProgress) / 100 }}
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center font-headline font-bold text-on-surface text-xs">{overallProgress}%</span>
         </div>
       </div>
 
-      {/* Main Roadmap */}
-      <div className="space-y-12">
-        {phases.map((phase, pIndex) => {
-          const prevPhaseComplete = pIndex === 0 || phases[pIndex-1].progress >= 100
-          
-          return (
-            <div key={phase.name} className="relative">
-              {/* Phase Header */}
-              <div className="flex items-center justify-between mb-4 px-1">
-                <div>
-                  <h2 className="font-headline font-semibold text-on-surface text-sm uppercase tracking-wider">{phase.name}</h2>
-                  <p className="text-[10px] font-body text-gray-500 mt-0.5">
-                    {phase.progress >= 100 ? '✅ PHASE COMPLETE' : phase.progress > 0 ? '🚀 IN PROGRESS' : '🔒 LOCKED'}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className={`text-xs font-headline font-bold ${phase.progress >= 100 ? 'text-success' : 'text-primary'}`}>
-                    {phase.progress}%
-                  </span>
-                </div>
-              </div>
-
-              {/* Horizontal Scrollable Goals */}
-              <div 
-                className="flex overflow-x-auto gap-4 pb-4 px-1 snap-x no-scrollbar"
-                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-              >
-                {phase.goals.sort((a,b) => a.id.localeCompare(b.id)).map((goal, gIndex) => {
-                  const isLocked = !prevPhaseComplete && phase.progress === 0
-                  return (
-                    <GoalCheckpoint 
-                      key={goal.id} 
-                      goal={goal} 
-                      onUpdate={updateGoal} 
-                      onRemove={removeGoal}
-                      status={isLocked ? 'locked' : 'available'}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
+      {/* Phase Cards — horizontal scroll, 2 visible at a time */}
+      <div
+        className="flex gap-4 px-5 overflow-x-auto snap-x snap-mandatory pb-4"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        {[1, 2, 3, 4].map((n, i) => (
+          <PhaseCard key={n} phaseNum={n} goals={phases[n]} onToggle={handleToggle} index={i} />
+        ))}
       </div>
 
-      {/* Floating Action Bar */}
-      <div className="fixed bottom-24 right-4 z-40">
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="w-14 h-14 rounded-full bg-primary text-background flex items-center justify-center shadow-xl shadow-primary/30 active:scale-95 transition-transform"
-        >
-          <span className="material-symbols-outlined text-2xl">add</span>
-        </button>
+      {/* Phase dots */}
+      <div className="flex justify-center gap-2 mt-2">
+        {[1, 2, 3, 4].map(n => (
+          <div key={n} className={`w-1.5 h-1.5 rounded-full ${PHASE_META[n].dot} opacity-70`} />
+        ))}
       </div>
-
-      {/* Add Modal */}
-      <AnimatePresence>
-        {showAddModal && (
-          <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm" onClick={() => setShowAddModal(false)} />
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] bg-surface border border-outline-variant rounded-3xl p-6 z-50 shadow-2xl overflow-hidden">
-              <h2 className="font-headline font-bold text-on-surface text-xl mb-6">Create Custom Goal</h2>
-              <div className="space-y-4">
-                <input placeholder="Goal name" className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.name} onChange={e => setNewGoal(p => ({ ...p, name: e.target.value }))} />
-                <div className="grid grid-cols-2 gap-3">
-                  <input type="number" placeholder="Target ($)" className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.target} onChange={e => setNewGoal(p => ({ ...p, target: e.target.value }))} />
-                  <input type="number" placeholder="Current ($)" className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.current} onChange={e => setNewGoal(p => ({ ...p, current: e.target.value }))} />
-                </div>
-                <select className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm text-on-surface appearance-none" value={newGoal.phase} onChange={e => setNewGoal(p => ({ ...p, phase: e.target.value }))}>
-                  <option>🟢 PHASE 1: FINANCIAL STABILITY</option>
-                  <option>🔵 PHASE 2: WEALTH BUILDING</option>
-                  <option>🟣 PHASE 3: FAMILY + ASSETS</option>
-                  <option>🔴 PHASE 4: FINANCIAL FREEDOM</option>
-                </select>
-                <textarea placeholder="Description" rows={3} className="w-full bg-surface-container border border-outline-variant rounded-2xl px-4 py-3 text-sm" value={newGoal.description} onChange={e => setNewGoal(p => ({ ...p, description: e.target.value }))} />
-              </div>
-              <div className="flex gap-3 mt-8">
-                <button onClick={() => setShowAddModal(false)} className="flex-1 py-3 text-gray-500 font-bold">Cancel</button>
-                <button onClick={handleAdd} className="flex-1 py-3 bg-primary text-background rounded-2xl font-bold">Create Goal</button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   )
 }
