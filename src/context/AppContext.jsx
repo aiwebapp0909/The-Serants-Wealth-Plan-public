@@ -2,6 +2,7 @@ import { createContext, useContext, useMemo, useEffect, useState, useRef } from 
 import { useAuth } from './AuthContext'
 import { doc, onSnapshot, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
+import { runMaintenanceTasks, addNetWorthSnapshot, initializeNewMonth, getCurrentMonth } from '../lib/dataManager'
 
 const AppContext = createContext(null)
 
@@ -63,23 +64,72 @@ export function AppProvider({ children }) {
   const [goals, setGoals] = useState(defaultGoals)
   const [transactions, setTransactions] = useState([])
   const isSyncing = useRef(false)
+  const lastNetWorthSaved = useRef(null)
 
-  // ─── 1. SYNC BUDGET (per userId + month) ───────────────────────────────────
+  // ─── 0. MAINTENANCE & INITIALIZATION (on user login) ──────────────────────────
+  useEffect(() => {
+    if (!userId) return
+    // Run cleanup tasks in background
+    runMaintenanceTasks(userId).catch(err => console.warn('Maintenance error:', err))
+  }, [userId])
+
+  // ─── 0.5 AUTO-INITIALIZE NEW MONTH ───────────────────────────────────────────
   useEffect(() => {
     if (!userId || !db) return
-    const budgetId = `${userId}_${currentMonth}`
-    const bRef = doc(db, 'budgets', budgetId)
-    const unsub = onSnapshot(bRef, (snap) => {
+    const month = getCurrentMonth()
+    if (month !== currentMonth) {
+      console.log(`📅 Month changed to ${month}`)
+      setCurrentMonth(month)
+    }
+  }, [userId, currentMonth])
+
+  // ─── 0.75 AUTO-SAVE NET WORTH SNAPSHOT (daily) ───────────────────────────────
+  useEffect(() => {
+    if (!userId || !db) return
+    
+    const today = new Date().toISOString().split('T')[0]
+    // Only save once per day
+    if (lastNetWorthSaved.current !== today && netWorth !== undefined) {
+      lastNetWorthSaved.current = today
+      addNetWorthSnapshot(userId, netWorth).catch(err => console.warn('Snapshot error:', err))
+    }
+  }, [userId, netWorth])
+
+  // ─── 1. SYNC & LOAD ALL BUDGETS (per userId) ────────────────────────────────
+  useEffect(() => {
+    if (!userId || !db) return
+    
+    // Load all budgets for this user (for history/switching between months)
+    const budgetQuery = query(
+      collection(db, 'budgets'),
+      where('userId', '==', userId)
+    )
+    
+    const unsub = onSnapshot(budgetQuery, (snapshot) => {
       isSyncing.current = true
-      if (snap.exists()) {
-        setBudgets(prev => ({ ...prev, [currentMonth]: snap.data() }))
-      } else {
-        setDoc(bRef, { ...defaultBudget, userId, month: currentMonth })
+      const newBudgets = {}
+      snapshot.docs.forEach(doc => {
+        const data = doc.data()
+        if (data.month) {
+          newBudgets[data.month] = data
+        }
+      })
+      
+      // Update state with loaded budgets
+      setBudgets(prev => ({ ...prev, ...newBudgets }))
+      
+      // Ensure current month exists
+      const currentMonthKey = getMonthKey()
+      if (!newBudgets[currentMonthKey]) {
+        const budgetId = `${userId}_${currentMonthKey}`
+        setDoc(doc(db, 'budgets', budgetId), { ...defaultBudget, userId, month: currentMonthKey })
       }
+      
       setTimeout(() => { isSyncing.current = false }, 100)
     })
+    
     return () => unsub()
-  }, [userId, currentMonth])
+  }, [userId])
 
   // ─── 2. SYNC USER DATA (goals, netWorth) ───────────────────────────────────
   useEffect(() => {
@@ -100,15 +150,16 @@ export function AppProvider({ children }) {
     return () => unsub()
   }, [userId])
 
-  // ─── 3. AUTO-SAVE BUDGET ────────────────────────────────────────────────────
+  // ─── 3. AUTO-SAVE CURRENT BUDGET ───────────────────────────────────────────
   const budget = budgets[currentMonth] || defaultBudget
   useEffect(() => {
     if (!userId || !db || isSyncing.current) return
     const id = setTimeout(() => {
-      setDoc(doc(db, 'budgets', `${userId}_${currentMonth}`), { ...budget, userId, month: currentMonth }, { merge: true })
+      const currentMonthKey = getMonthKey()
+      setDoc(doc(db, 'budgets', `${userId}_${currentMonthKey}`), { ...budget, userId, month: currentMonthKey }, { merge: true })
     }, 800)
     return () => clearTimeout(id)
-  }, [budget, userId, currentMonth])
+  }, [budget, userId])
 
   // ─── 4. AUTO-SAVE USER DATA ─────────────────────────────────────────────────
   useEffect(() => {
