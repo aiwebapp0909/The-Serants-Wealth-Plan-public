@@ -1,12 +1,26 @@
 import 'dotenv/config';
 import express from 'express';
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
+import * as admin from 'firebase-admin';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 
 const app = express();
+
+// --- FIREBASE ADMIN INITIALIZATION ---
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+    credential: admin.credential.cert({
+      projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL || 'firebase-adminsdk@' + process.env.VITE_FIREBASE_PROJECT_ID + '.iam.gserviceaccount.com',
+      privateKey: process.env.FIREBASE_PRIVATE_KEY ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+    })
+  });
+}
+const db = admin.firestore();
 
 // --- FINTECH SECURITY LAYER ---
 app.use(helmet()); // Secure HTTP Headers
@@ -130,6 +144,76 @@ app.post('/api/transactions', auditLogger('FETCH_BANK_DATA'), async (req, res) =
     res.json(response.data.transactions);
   } catch (error) {
     res.status(500).json({ error: 'Secure Fetch Failed' });
+  }
+});
+
+// Sync transactions to Firestore for persistence and analytics
+app.post('/api/sync_transactions', auditLogger('SYNC_TO_FIRESTORE'), async (req, res) => {
+  const { secure_token, userId } = req.body;
+
+  if (!secure_token || !userId) {
+    return res.status(400).json({ error: 'Missing secure_token or userId' });
+  }
+
+  try {
+    const access_token = decrypt(secure_token);
+    
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const formatDate = (date) => date.toISOString().split('T')[0];
+
+    // Fetch from Plaid
+    const response = await client.transactionsGet({
+      access_token,
+      start_date: formatDate(thirtyDaysAgo),
+      end_date: formatDate(now),
+    });
+
+    const transactions = response.data.transactions;
+    const batch = db.batch();
+    let syncCount = 0;
+
+    // Save each transaction to Firestore
+    for (const tx of transactions) {
+      const txRef = db.collection('transactions').doc(tx.transaction_id);
+      
+      batch.set(txRef, {
+        plaidId: tx.transaction_id,
+        userId,
+        date: tx.date,
+        amount: Math.abs(tx.amount),
+        merchant: tx.merchant_name || tx.name,
+        merchantId: tx.merchant_name || null,
+        category: tx.personal_finance_category?.primary || 'UNCATEGORIZED',
+        categoryDetail: tx.personal_finance_category?.detailed || null,
+        name: tx.name,
+        isExpense: tx.amount > 0,
+        pending: tx.pending,
+        plaidData: {
+          accountId: tx.account_id,
+          counterparties: tx.counterparties,
+          logoUrl: tx.logo_url,
+          website: tx.website,
+        },
+        syncedAt: new Date().toISOString(),
+      }, { merge: true });
+
+      syncCount++;
+    }
+
+    // Commit batch
+    if (syncCount > 0) {
+      await batch.commit();
+    }
+
+    res.json({
+      status: 'success',
+      syncedTransactions: syncCount,
+      message: `Synced ${syncCount} transactions to Firestore`
+    });
+  } catch (error) {
+    console.error('Sync error:', error);
+    res.status(500).json({ error: 'Transaction sync failed', details: error.message });
   }
 });
 

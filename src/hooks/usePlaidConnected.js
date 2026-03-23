@@ -112,6 +112,40 @@ export function usePlaid() {
   }
 
   /**
+   * Sync Plaid transactions to Firestore for persistence
+   */
+  const syncTransactionsToFirebase = async (secureToken, userId) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch(`${API_URL}/api/sync_transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          secure_token: secureToken,
+          userId
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to sync transactions')
+      }
+
+      const data = await response.json()
+      console.log('✅ Synced to Firestore:', data.message)
+      return data
+    } catch (err) {
+      const errorMsg = err.message || 'Failed to sync transactions to Firestore'
+      console.warn('Sync warning (not critical):', errorMsg)
+      // Don't set error state for this - it's background sync
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  /**
    * Get account balances (placeholder - integrate with backend if needed)
    */
   const getAccountBalances = async () => {
@@ -160,6 +194,7 @@ export function usePlaid() {
     createLinkToken,
     exchangePublicToken,
     fetchTransactions,
+    syncTransactionsToFirebase,
     getAccountBalances,
     unlinkAccount
   }

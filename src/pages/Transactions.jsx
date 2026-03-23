@@ -113,6 +113,7 @@ export default function Transactions() {
     linkedAccounts, 
     fetchTransactions, 
     exchangePublicToken,
+    syncTransactionsToFirebase,
     getAccountBalances 
   } = usePlaid()
 
@@ -178,6 +179,15 @@ export default function Transactions() {
       
       // Fetch transactions using the secure token
       await fetchTransactions(secureToken)
+      
+      // Sync transactions to Firestore for persistence (fire-and-forget)
+      setTimeout(async () => {
+        try {
+          await syncTransactionsToFirebase(secureToken, user.uid)
+        } catch (err) {
+          console.warn('Background sync failed (non-critical):', err)
+        }
+      }, 500)
       
       alert('Bank connected successfully!')
     } catch (error) {
