@@ -242,7 +242,8 @@ export default function Dashboard() {
               <motion.div initial={{ width: 0 }} animate={{ width: `${pct(netWorth, ultimateGoal?.target)}%` }} className="h-full bg-primary rounded-full" />
            </div>
         </div>
-WEALTH PROJECTION */}
+
+        {/* ROW 4: WEALTH PROJECTION */}
         <WealthProjection 
           totalInvesting={totalInvesting} 
           netWorth={netWorth}
@@ -269,8 +270,7 @@ WEALTH PROJECTION */}
           <div className="flex items-center justify-center">
             <span className="material-symbols-outlined text-primary/60">chevron_right</span>
           </div>
-        </motion.button
-        </motion.div>
+        </motion.button>
       </div>
 
       {/* ACCOUNT INFO MODAL */}
