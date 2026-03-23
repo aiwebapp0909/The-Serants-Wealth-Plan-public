@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 const navItems = [
   { path: '/', label: 'Dashboard', icon: 'home' },
   { path: '/budget', label: 'Budget', icon: 'grid_view' },
+  { path: '/transactions', label: 'Transactions', icon: 'receipt' },
   { path: '/analytics', label: 'Analytics', icon: 'trending_up' },
   { path: '/goals', label: 'Goals', icon: 'flag' },
   { path: '/invest', label: 'Invest', icon: 'show_chart' },
