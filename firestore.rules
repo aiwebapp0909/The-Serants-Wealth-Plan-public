@@ -39,5 +39,19 @@ service cloud.firestore {
       allow read, write: if request.auth != null && 
         request.auth.uid == userId;
     }
+
+    // 🏦 PLAID ACCOUNTS (FOR BANK CONNECTIONS)
+    match /accounts/{accountId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+        request.auth.uid == request.resource.data.userId;
+    }
+
+    // 🔐 PLAID ITEMS (ENCRYPTED ACCESS TOKENS)
+    match /users/{userId}/plaidItems/{itemId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid == userId;
+    }
   }
 }

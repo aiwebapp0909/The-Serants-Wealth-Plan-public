@@ -4,6 +4,8 @@ import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import { useAI } from '../hooks/useAI'
 import { useState, useEffect } from 'react'
+import { db } from '../firebase'
+import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import CoachChat from '../components/CoachChat'
 import WealthProjection from '../components/WealthProjection'
 
@@ -30,6 +32,8 @@ export default function Dashboard() {
   const { insight, loading: aiLoading, generateInsight } = useAI()
   const [showSyncModal, setShowSyncModal] = useState(false)
   const [showCoachChat, setShowCoachChat] = useState(false)
+  const [realSpending, setRealSpending] = useState(0)
+  const [isOverBudget, setIsOverBudget] = useState(false)
 
   useEffect(() => {
     if (user && !insight && !aiLoading) {
@@ -43,6 +47,34 @@ export default function Dashboard() {
       })
     }
   }, [user, netWorth, totalIncome, totalExpenses, healthScore, nextImmediateGoal])
+
+  // Fetch real spending from Firestore transactions
+  useEffect(() => {
+    if (!user) return
+
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+    const monthEnd = now.toISOString().split('T')[0]
+
+    const q = query(
+      collection(db, 'transactions'),
+      where('userId', '==', user.uid)
+    )
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      let monthlyTotal = 0
+      snapshot.docs.forEach((doc) => {
+        const tx = doc.data()
+        if (tx.date >= monthStart && tx.date <= monthEnd) {
+          monthlyTotal += tx.amount || 0
+        }
+      })
+      setRealSpending(monthlyTotal)
+      setIsOverBudget(monthlyTotal > totalExpenses)
+    })
+
+    return unsubscribe
+  }, [user, totalExpenses])
 
   return (
     <div className="bg-background min-h-screen">
@@ -153,6 +185,42 @@ export default function Dashboard() {
             </div>
           </Link>
         </div>
+
+        {/* ROW 2.5: REAL SPENDING */}
+        <Link to="/transactions">
+          <div className={`bg-surface border rounded-2xl p-4 relative cursor-pointer active:scale-[0.98] transition-all ${isOverBudget ? 'border-error/40 bg-error/5' : 'border-outline-variant'}`}>
+            <div className="absolute top-4 right-4 text-[8px] font-body font-bold px-2 py-1 rounded bg-surface-container-high">
+              THIS MONTH
+            </div>
+            <div className="mb-4">
+              <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest mb-2">Real Spending</p>
+              <h2 className={`font-headline font-bold text-3xl ${isOverBudget ? 'text-error' : 'text-success'}`}>
+                {fmt(realSpending)}
+              </h2>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-[9px] font-body">
+                <span className="text-gray-500 uppercase font-bold tracking-widest">Budget</span>
+                <span className="text-on-surface font-bold">{fmt(totalExpenses)}</span>
+              </div>
+              {isOverBudget && (
+                <div className="flex justify-between items-center text-[9px] font-body bg-error/10 p-2 rounded border border-error/20">
+                  <span className="text-error uppercase font-bold tracking-widest">Over by</span>
+                  <span className="text-error font-bold">{fmt(realSpending - totalExpenses)}</span>
+                </div>
+              )}
+              {!isOverBudget && (
+                <div className="h-1 bg-surface-container-high rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }} 
+                    animate={{ width: `${Math.min(100, (realSpending / totalExpenses) * 100)}%` }} 
+                    className="h-full bg-success rounded-full" 
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </Link>
 
         {/* ROW 3: ULTIMATE GOAL (CAROUSEL STYLE) */}
         <div className="bg-surface border border-outline-variant rounded-2xl p-5 relative overflow-hidden bg-gradient-to-br from-surface to-[#1A1B23]">
