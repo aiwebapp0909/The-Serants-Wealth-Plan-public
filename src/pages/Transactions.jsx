@@ -83,7 +83,7 @@ function PlaidLinkButton({ onSuccess }) {
       window.Plaid.create({
         token: linkToken,
         onSuccess: (public_token, metadata) => {
-          onSuccess(public_token, user.uid)
+          onSuccess(public_token)
         },
         onExit: (err, metadata) => {
           if (err) console.error('Plaid error:', err)
@@ -166,14 +166,19 @@ export default function Transactions() {
   }, [transactions, filter, dateRange])
 
   // Handle Plaid link
-  const handlePlaidSuccess = async (publicToken, userId) => {
+  const handlePlaidSuccess = async (publicToken) => {
     try {
       setLoading(true)
-      await exchangePublicToken(publicToken, userId)
-      await getAccountBalances(userId)
       
-      // Fetch transactions
-      await fetchTransactions(userId, dateRange.start, dateRange.end)
+      // Exchange public token for secure token
+      const { secureToken } = await exchangePublicToken(publicToken, '')
+      
+      // Store secure token in session
+      sessionStorage.setItem('plaid_secure_token', secureToken)
+      
+      // Fetch transactions using the secure token
+      await fetchTransactions(secureToken)
+      
       alert('Bank connected successfully!')
     } catch (error) {
       console.error('Plaid setup error:', error)

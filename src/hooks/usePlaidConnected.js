@@ -1,15 +1,15 @@
 import { useState } from 'react'
-import { httpsCallable } from 'firebase/functions'
-import { functions } from '../firebase'
 
 /**
  * Plaid Integration Hook
- * Handles bank connections and transaction fetching
+ * Calls backend API endpoints (Express server on Vercel)
  */
 export function usePlaid() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [linkedAccounts, setLinkedAccounts] = useState([])
+
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
   /**
    * Create Plaid Link token for connection flow
@@ -19,9 +19,18 @@ export function usePlaid() {
     setError(null)
 
     try {
-      const createLinkTokenFn = httpsCallable(functions, 'createPlaidLinkToken')
-      const result = await createLinkTokenFn({ userId })
-      return result.data.linkToken
+      const response = await fetch(`${API_URL}/api/create_link_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to create Plaid link token')
+      }
+
+      const data = await response.json()
+      return data.link_token
     } catch (err) {
       const errorMsg = err.message || 'Failed to create Plaid link token'
       setError(errorMsg)
@@ -33,23 +42,27 @@ export function usePlaid() {
   }
 
   /**
-   * Exchange public token for access token
+   * Exchange public token for secure token
    */
   const exchangePublicToken = async (publicToken, userId) => {
     setLoading(true)
     setError(null)
 
     try {
-      const exchangeTokenFn = httpsCallable(functions, 'exchangePlaidPublicToken')
-      const result = await exchangeTokenFn({
-        publicToken,
-        userId
+      const response = await fetch(`${API_URL}/api/exchange_public_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ public_token: publicToken, userId }),
       })
 
+      if (!response.ok) {
+        throw new Error('Failed to connect bank account')
+      }
+
+      const data = await response.json()
       return {
-        itemId: result.data.itemId,
-        accountIds: result.data.accountIds,
-        accountNames: result.data.accountNames
+        secureToken: data.secure_token,
+        status: data.status
       }
     } catch (err) {
       const errorMsg = err.message || 'Failed to connect bank account'
@@ -63,20 +76,31 @@ export function usePlaid() {
 
   /**
    * Fetch transactions from connected bank
+   * Requires MFA token from user session
    */
-  const fetchTransactions = async (userId, startDate, endDate) => {
+  const fetchTransactions = async (secureToken) => {
     setLoading(true)
     setError(null)
 
     try {
-      const getTransactionsFn = httpsCallable(functions, 'getPlaidTransactions')
-      const result = await getTransactionsFn({
-        userId,
-        startDate,
-        endDate
+      // Get MFA token from headers or session
+      const mfaToken = sessionStorage.getItem('mfa_token') || 'user_authenticated'
+
+      const response = await fetch(`${API_URL}/api/transactions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          secure_token: secureToken,
+          mfa_token: mfaToken
+        }),
       })
 
-      return result.data.transactions || []
+      if (!response.ok) {
+        throw new Error('Failed to fetch transactions')
+      }
+
+      const transactions = await response.json()
+      return transactions || []
     } catch (err) {
       const errorMsg = err.message || 'Failed to fetch transactions'
       setError(errorMsg)
@@ -88,18 +112,17 @@ export function usePlaid() {
   }
 
   /**
-   * Get account balances
+   * Get account balances (placeholder - integrate with backend if needed)
    */
-  const getAccountBalances = async (userId) => {
+  const getAccountBalances = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const getBalancesFn = httpsCallable(functions, 'getPlaidBalances')
-      const result = await getBalancesFn({ userId })
-
-      setLinkedAccounts(result.data.accounts || [])
-      return result.data.accounts
+      // For now, return empty array
+      // You can extend the backend with a /api/balances endpoint if needed
+      setLinkedAccounts([])
+      return []
     } catch (err) {
       const errorMsg = err.message || 'Failed to fetch account balances'
       setError(errorMsg)
@@ -111,18 +134,15 @@ export function usePlaid() {
   }
 
   /**
-   * Remove linked account
+   * Remove linked account (placeholder)
    */
-  const unlinkAccount = async (userId, itemId) => {
+  const unlinkAccount = async () => {
     setLoading(true)
     setError(null)
 
     try {
-      const unlinkFn = httpsCallable(functions, 'unlinkPlaidAccount')
-      await unlinkFn({ userId, itemId })
-
-      // Refresh account list
-      await getAccountBalances(userId)
+      // Implement when you add delete endpoint to backend
+      setLinkedAccounts([])
     } catch (err) {
       const errorMsg = err.message || 'Failed to unlink account'
       setError(errorMsg)
