@@ -17,7 +17,7 @@ function fmt(n) {
 const PERIODS = ['3M', '6M', 'YTD', '1Y', 'ALL TIME']
 
 export default function Analytics() {
-  const { netWorthData, netWorth, totalAssets, totalLiabilities, budget, totalIncome, totalExpenses } = useApp()
+  const { netWorthData, netWorth, totalAssets, totalLiabilities, budget, totalIncome, totalExpenses, getActual, getPlanned, EXPENSE_CATEGORIES } = useApp()
   const [period, setPeriod] = useState('ALL TIME')
 
   const history = useMemo(() => {
@@ -41,31 +41,25 @@ export default function Analytics() {
   }, [history, netWorth])
 
   const spendingBreakdown = useMemo(() => {
-    const sections = [
-      { name: 'Fixed Bills', key: 'fixedBills' },
-      { name: 'Food', key: 'food' },
-      { name: 'Fun Money', key: 'funMoney' },
-      { name: 'Savings', key: 'savings' },
-      { name: 'Investing', key: 'investing' },
-    ]
-    return sections
-      .map(({ name, key }) => ({
+    if (!getActual) return []
+    return (EXPENSE_CATEGORIES || [])
+      .map((name) => ({
         name,
-        value: (budget[key] || []).reduce((s, i) => s + Number(i.planned || 0), 0),
+        value: Math.abs(getActual(name)),
       }))
       .filter(d => d.value > 0)
-  }, [budget])
+  }, [budget, getActual, EXPENSE_CATEGORIES])
 
   const categoryBar = useMemo(() => {
-    const s = (arr) => arr || []
+    if (!getActual || !getPlanned) return []
     return [
-      { name: 'Income',  planned: s(budget.income).reduce((a, i) => a + Number(i.planned || 0), 0),    actual: s(budget.income).reduce((a, i) => a + Number(i.actual || 0), 0) },
-      { name: 'Bills',   planned: s(budget.fixedBills).reduce((a, i) => a + Number(i.planned || 0), 0), actual: s(budget.fixedBills).reduce((a, i) => a + Number(i.actual || 0), 0) },
-      { name: 'Food',    planned: s(budget.food).reduce((a, i) => a + Number(i.planned || 0), 0),       actual: s(budget.food).reduce((a, i) => a + Number(i.actual || 0), 0) },
-      { name: 'Savings', planned: s(budget.savings).reduce((a, i) => a + Number(i.planned || 0), 0),    actual: s(budget.savings).reduce((a, i) => a + Number(i.actual || 0), 0) },
-      { name: 'Invest',  planned: s(budget.investing).reduce((a, i) => a + Number(i.planned || 0), 0),  actual: s(budget.investing).reduce((a, i) => a + Number(i.actual || 0), 0) },
+      { name: 'Income',  planned: getPlanned('Income'), actual: getActual('Income') },
+      { name: 'Housing', planned: getPlanned('Housing'), actual: Math.abs(getActual('Housing')) },
+      { name: 'Food',    planned: getPlanned('Food & Dining'), actual: Math.abs(getActual('Food & Dining')) },
+      { name: 'Savings', planned: getPlanned('Savings'), actual: getActual('Savings') },
+      { name: 'Invest',  planned: getPlanned('Investing'), actual: getActual('Investing') },
     ]
-  }, [budget])
+  }, [budget, getActual, getPlanned])
 
 
   const CustomTooltip = ({ active, payload, label }) => {

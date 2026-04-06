@@ -2,29 +2,19 @@ import { createContext, useContext, useMemo, useEffect, useState, useRef } from 
 import { useAuth } from './AuthContext'
 import { doc, onSnapshot, setDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import { db } from '../firebase'
-import { runMaintenanceTasks, addNetWorthSnapshot, initializeNewMonth, getCurrentMonth } from '../lib/dataManager'
 
 const AppContext = createContext(null)
 
-const defaultBudget = {
-  income: [
-    { id: '1', name: 'Primary Income', icon: 'person', planned: 0, actual: 0 },
-  ],
-  fixedBills: [
-    { id: '1', name: 'Rent / Mortgage', icon: 'home', planned: 0, actual: 0 },
-    { id: '2', name: 'Transportation', icon: 'directions_car', planned: 0, actual: 0 },
-    { id: '3', name: 'Phone', icon: 'smartphone', planned: 0, actual: 0 },
-    { id: '4', name: 'Internet', icon: 'wifi', planned: 0, actual: 0 },
-    { id: '5', name: 'Utilities', icon: 'bolt', planned: 0, actual: 0 },
-  ],
-  food: [
-    { id: '1', name: 'Groceries', icon: 'shopping_cart', planned: 0, actual: 0 },
-    { id: '2', name: 'Eating Out', icon: 'restaurant', planned: 0, actual: 0 },
-  ],
-  savings: [{ id: '1', name: 'Emergency Fund', icon: 'savings', planned: 0, actual: 0 }],
-  investing: [{ id: '1', name: 'Index Funds', icon: 'trending_up', planned: 0, actual: 0 }],
-  funMoney: [{ id: '1', name: 'Personal Fun', icon: 'celebration', planned: 0, actual: 0 }],
-}
+const CATEGORIES = [
+  'Income', 'Housing', 'Bills & Utilities', 'Food & Dining', 'Transportation',
+  'Insurance', 'Subscriptions', 'Shopping', 'Entertainment', 'Healthcare',
+  'Savings', 'Investing', 'Other'
+]
+
+const defaultBudget = CATEGORIES.reduce((acc, cat) => {
+  acc[cat] = { planned: 0, actual: null } // actual: null means it auto-pulls from transactions
+  return acc
+}, {})
 
 const defaultNetWorth = {
   assets: { cash: 0, investments: 0, realEstate: 0, vehicles: 0, other: 0 },
@@ -64,72 +54,38 @@ export function AppProvider({ children }) {
   const [goals, setGoals] = useState(defaultGoals)
   const [transactions, setTransactions] = useState([])
   const isSyncing = useRef(false)
-  const lastNetWorthSaved = useRef(null)
 
-  // ─── 0. MAINTENANCE & INITIALIZATION (on user login) ──────────────────────────
-  useEffect(() => {
-    if (!userId) return
-    // Run cleanup tasks in background
-    runMaintenanceTasks(userId).catch(err => console.warn('Maintenance error:', err))
-  }, [userId])
-
-  // ─── 0.5 AUTO-INITIALIZE NEW MONTH ───────────────────────────────────────────
+  // ─── TRANSACTION REAL-TIME SYNC ───────────────────────────────────────────
   useEffect(() => {
     if (!userId || !db) return
-    const month = getCurrentMonth()
-    if (month !== currentMonth) {
-      console.log(`📅 Month changed to ${month}`)
-      setCurrentMonth(month)
-    }
-  }, [userId, currentMonth])
-
-  // ─── 0.75 AUTO-SAVE NET WORTH SNAPSHOT (daily) ───────────────────────────────
-  useEffect(() => {
-    if (!userId || !db) return
-    
-    const today = new Date().toISOString().split('T')[0]
-    // Only save once per day
-    if (lastNetWorthSaved.current !== today && netWorth !== undefined) {
-      lastNetWorthSaved.current = today
-      addNetWorthSnapshot(userId, netWorth).catch(err => console.warn('Snapshot error:', err))
-    }
-  }, [userId, netWorth])
-
-  // ─── 1. SYNC & LOAD ALL BUDGETS (per userId) ────────────────────────────────
-  useEffect(() => {
-    if (!userId || !db) return
-    
-    // Load all budgets for this user (for history/switching between months)
-    const budgetQuery = query(
-      collection(db, 'budgets'),
-      where('userId', '==', userId)
-    )
-    
-    const unsub = onSnapshot(budgetQuery, (snapshot) => {
-      isSyncing.current = true
-      const newBudgets = {}
-      snapshot.docs.forEach(doc => {
-        const data = doc.data()
-        if (data.month) {
-          newBudgets[data.month] = data
-        }
-      })
-      
-      // Update state with loaded budgets
-      setBudgets(prev => ({ ...prev, ...newBudgets }))
-      
-      // Ensure current month exists
-      const currentMonthKey = getMonthKey()
-      if (!newBudgets[currentMonthKey]) {
-        const budgetId = `${userId}_${currentMonthKey}`
-        setDoc(doc(db, 'budgets', budgetId), { ...defaultBudget, userId, month: currentMonthKey })
-      }
-      
-      setTimeout(() => { isSyncing.current = false }, 100)
+    const q = query(collection(db, 'transactions'), where('userId', '==', userId))
+    const unsub = onSnapshot(q, (snap) => {
+      const txs = []
+      snap.forEach(d => txs.push({ id: d.id, ...d.data() }))
+      txs.sort((a, b) => new Date(b.date) - new Date(a.date))
+      setTransactions(txs)
     })
-    
     return () => unsub()
   }, [userId])
+
+  // ─── 1. SYNC ALL BUDGETS (per userId) ──────────────────────────────────────
+  useEffect(() => {
+    if (!userId || !db) return
+    const qParams = query(collection(db, 'budgets'), where('userId', '==', userId))
+    const unsub = onSnapshot(qParams, (snap) => {
+      isSyncing.current = true
+      const loadedBudgets = {}
+      snap.forEach(d => { loadedBudgets[d.data().month] = d.data() })
+      
+      setBudgets(loadedBudgets)
+      
+      if (!loadedBudgets[currentMonth]) {
+        setDoc(doc(db, 'budgets', `${userId}_${currentMonth}`), { ...defaultBudget, userId, month: currentMonth })
+      }
+      setTimeout(() => { isSyncing.current = false }, 100)
+    })
+    return () => unsub()
+  }, [userId, currentMonth])
 
   // ─── 2. SYNC USER DATA (goals, netWorth) ───────────────────────────────────
   useEffect(() => {
@@ -150,16 +106,15 @@ export function AppProvider({ children }) {
     return () => unsub()
   }, [userId])
 
-  // ─── 3. AUTO-SAVE CURRENT BUDGET ───────────────────────────────────────────
+  // ─── 3. AUTO-SAVE BUDGET ────────────────────────────────────────────────────
   const budget = budgets[currentMonth] || defaultBudget
   useEffect(() => {
     if (!userId || !db || isSyncing.current) return
     const id = setTimeout(() => {
-      const currentMonthKey = getMonthKey()
-      setDoc(doc(db, 'budgets', `${userId}_${currentMonthKey}`), { ...budget, userId, month: currentMonthKey }, { merge: true })
+      setDoc(doc(db, 'budgets', `${userId}_${currentMonth}`), { ...budget, userId, month: currentMonth }, { merge: true })
     }, 800)
     return () => clearTimeout(id)
-  }, [budget, userId])
+  }, [budget, userId, currentMonth])
 
   // ─── 4. AUTO-SAVE USER DATA ─────────────────────────────────────────────────
   useEffect(() => {
@@ -171,63 +126,101 @@ export function AppProvider({ children }) {
   }, [goals, netWorthData, transactions, userId])
 
   // ─── CALCULATIONS ───────────────────────────────────────────────────────────
-  const safe = (arr) => Array.isArray(arr) ? arr : []
+  const EXPENSE_CATEGORIES = ['Housing', 'Bills & Utilities', 'Food & Dining', 'Transportation', 'Insurance', 'Subscriptions', 'Shopping', 'Entertainment', 'Healthcare', 'Other']
 
-  const totalIncome = useMemo(() => safe(budget.income).reduce((s, i) => s + Number(i.actual || 0), 0), [budget])
-  const totalExpenses = useMemo(() =>
-    ['fixedBills', 'food', 'funMoney'].reduce((sum, sec) =>
-      sum + safe(budget[sec]).reduce((s, i) => s + Math.abs(Number(i.actual || 0)), 0), 0), [budget])
-  const totalSavings = useMemo(() => safe(budget.savings).reduce((s, i) => s + Number(i.actual || 0), 0), [budget])
-  const totalInvesting = useMemo(() => safe(budget.investing).reduce((s, i) => s + Number(i.actual || 0), 0), [budget])
+  // Auto-calculate from transactions
+  const monthTransactions = useMemo(() => {
+    return transactions.filter(t => t.date && t.date.startsWith(currentMonth))
+  }, [transactions, currentMonth])
 
-  const totalPlannedIncome = useMemo(() => safe(budget.income).reduce((s, i) => s + Number(i.planned || 0), 0), [budget])
-  const totalPlannedExpenses = useMemo(() =>
-    ['fixedBills', 'food', 'funMoney'].reduce((sum, sec) =>
-      sum + safe(budget[sec]).reduce((s, i) => s + Math.abs(Number(i.planned || 0)), 0), 0), [budget])
-  const totalPlannedSavings = useMemo(() => safe(budget.savings).reduce((s, i) => s + Number(i.planned || 0), 0), [budget])
-  const totalPlannedInvesting = useMemo(() => safe(budget.investing).reduce((s, i) => s + Number(i.planned || 0), 0), [budget])
+  const transactionSums = useMemo(() => {
+    const sums = {}
+    monthTransactions.forEach(t => {
+      // Default missing categories to Other
+      const cat = t.category || 'Other'
+      sums[cat] = (sums[cat] || 0) + Math.abs(t.amount || 0)
+    })
+    return sums
+  }, [monthTransactions])
+
+  const getActual = (cat) => {
+    const b = budget[cat]
+    if (b && b.actual !== null && b.actual !== undefined && b.actual !== '') {
+      return Number(b.actual)
+    }
+    return transactionSums[cat] || 0
+  }
+
+  const getPlanned = (cat) => Number(budget[cat]?.planned || 0)
+
+  const totalIncome = useMemo(() => getActual('Income'), [budget, transactionSums])
+  const totalExpenses = useMemo(() => EXPENSE_CATEGORIES.reduce((s, cat) => s + getActual(cat), 0), [budget, transactionSums])
+  const totalSavings = useMemo(() => getActual('Savings'), [budget, transactionSums])
+  const totalInvesting = useMemo(() => getActual('Investing'), [budget, transactionSums])
+
+  const totalPlannedIncome = useMemo(() => getPlanned('Income'), [budget])
+  const totalPlannedExpenses = useMemo(() => EXPENSE_CATEGORIES.reduce((s, cat) => s + getPlanned(cat), 0), [budget])
+  const totalPlannedSavings = useMemo(() => getPlanned('Savings'), [budget])
+  const totalPlannedInvesting = useMemo(() => getPlanned('Investing'), [budget])
+
+  // GLOBAL SAVINGS ACROSS ALL MONTHS
+  const globalSavingsActual = useMemo(() => {
+    let total = 0
+    const uniqueMonths = new Set([...Object.keys(budgets), ...transactions.map(t => t.date?.substring(0, 7)).filter(Boolean)])
+    
+    uniqueMonths.forEach(m => {
+      const b = budgets[m]
+      if (b && b['Savings'] && b['Savings'].actual !== null && b['Savings'].actual !== undefined && b['Savings'].actual !== '') {
+        total += Number(b['Savings'].actual)
+      } else {
+        const monthTxs = transactions.filter(t => t.date?.startsWith(m) && t.category === 'Savings')
+        total += monthTxs.reduce((acc, t) => acc + Math.abs(t.amount || 0), 0)
+      }
+    })
+    return total
+  }, [budgets, transactions])
+
+  // AUTO-SYNC GOALS
+  const syncedGoals = useMemo(() => {
+    let remainingSavings = globalSavingsActual
+    return goals.map(g => {
+      if (!g.active) return g
+      // Distribute global savings automatically into active goals sequentially
+      const amountForThisGoal = Math.min(remainingSavings, g.target)
+      remainingSavings = Math.max(0, remainingSavings - amountForThisGoal)
+      return { ...g, current: amountForThisGoal }
+    })
+  }, [goals, globalSavingsActual])
 
   const totalAssets = useMemo(() => {
     const { cash = 0, realEstate = 0, vehicles = 0, other = 0 } = netWorthData.assets || {}
-    return Number(cash) + Number(realEstate) + Number(vehicles) + Number(other) + totalSavings + totalInvesting
-  }, [netWorthData.assets, totalSavings, totalInvesting])
+    return Number(cash) + Number(realEstate) + Number(vehicles) + Number(other) + globalSavingsActual + totalInvesting
+  }, [netWorthData.assets, globalSavingsActual, totalInvesting])
 
   const totalLiabilities = useMemo(() =>
     Object.values(netWorthData.liabilities || {}).reduce((s, v) => s + Number(v || 0), 0), [netWorthData.liabilities])
 
   const netWorth = totalAssets - totalLiabilities
-  const unassigned = totalIncome - (totalExpenses + totalSavings + totalInvesting)
-  const unassignedPlanned = totalPlannedIncome - (totalPlannedExpenses + totalPlannedSavings + totalPlannedInvesting)
+  const unassigned = totalIncome + totalExpenses - (totalSavings + totalInvesting)
+  const unassignedPlanned = totalPlannedIncome + totalPlannedExpenses - (totalPlannedSavings + totalPlannedInvesting)
 
   // ─── BUDGET ACTIONS ─────────────────────────────────────────────────────────
-  const updateBudgetItem = (section, id, field, value) => {
-    let v = Number(value) || 0
-    if (['fixedBills', 'food', 'funMoney'].includes(section)) v = -Math.abs(v)
-    else v = Math.abs(v)
+  const updateBudgetItem = (category, field, value) => {
+    let v = value
+    // Only coerce to number for planned/actual, not for recurring
+    if (field === 'planned' || field === 'actual') {
+      v = value === null ? null : Math.abs(Number(value) || 0)
+      if (value === '') v = null // handle empty string as fallback to transactions
+    }
     setBudgets(prev => ({
       ...prev,
       [currentMonth]: {
         ...prev[currentMonth],
-        [section]: prev[currentMonth][section].map(item => item.id === id ? { ...item, [field]: v } : item)
+        [category]: {
+          ...(prev[currentMonth]?.[category] || { planned: 0, actual: null }),
+          [field]: v
+        }
       }
-    }))
-  }
-
-  const addBudgetItem = (section, name = 'New Item') => {
-    const iconMap = { income: 'payments', fixedBills: 'receipt', food: 'lunch_dining', savings: 'savings', investing: 'bar_chart', funMoney: 'celebration' }
-    setBudgets(prev => ({
-      ...prev,
-      [currentMonth]: {
-        ...prev[currentMonth],
-        [section]: [...safe(prev[currentMonth]?.[section]), { id: Date.now().toString(), name, icon: iconMap[section] || 'circle', planned: 0, actual: 0 }]
-      }
-    }))
-  }
-
-  const removeBudgetItem = (section, id) => {
-    setBudgets(prev => ({
-      ...prev,
-      [currentMonth]: { ...prev[currentMonth], [section]: prev[currentMonth][section].filter(i => i.id !== id) }
     }))
   }
 
@@ -236,6 +229,8 @@ export function AppProvider({ children }) {
     setGoals(prev => prev.map(g => g.id === id ? { ...g, [field]: ['current', 'target'].includes(field) ? Number(value) || 0 : value } : g))
   const addGoal = (goal) => setGoals(prev => [...prev, { ...goal, id: Date.now().toString() }])
   const removeGoal = (id) => setGoals(prev => prev.filter(g => g.id !== id))
+  const startGoal = (id, deadline) => setGoals(prev => prev.map(g => g.id === id ? { ...g, deadline, active: true } : g))
+  const stopGoal = (id) => setGoals(prev => prev.map(g => g.id === id ? { ...g, active: false } : g))
 
   // ─── TRANSACTION ACTIONS ────────────────────────────────────────────────────
   const addTransaction = (tx) => setTransactions(prev => [{ ...tx, id: Date.now().toString(), date: tx.date || new Date().toISOString().split('T')[0] }, ...prev])
@@ -247,27 +242,70 @@ export function AppProvider({ children }) {
     const sr = totalIncome > 0 ? (totalSavings + totalInvesting) / totalIncome : 0
     if (sr >= 0.2) score += 40; else if (sr >= 0.1) score += 20
     if (totalLiabilities === 0) score += 30; else if (totalLiabilities < totalAssets / 2) score += 15
-    if (goals.some(g => g.name.includes('Emergency Fund') && g.current >= g.target)) score += 30
+    if (syncedGoals.some(g => g.name.includes('Emergency Fund') && g.current >= g.target)) score += 30
     return score
-  }, [totalIncome, totalSavings, totalInvesting, totalAssets, totalLiabilities, goals])
+  }, [totalIncome, totalSavings, totalInvesting, totalAssets, totalLiabilities, syncedGoals])
 
-  const nextImmediateGoal = useMemo(() => goals.find(g => g.isImmediate && g.current < g.target), [goals])
-  const nextGoal = useMemo(() => goals.find(g => !g.isImmediate && !g.isUltimate && g.current < g.target), [goals])
-  const ultimateGoal = useMemo(() => goals.find(g => g.isUltimate), [goals])
+  const nextImmediateGoal = useMemo(() => syncedGoals.find(g => g.isImmediate && g.current < g.target), [syncedGoals])
+  const nextGoal = useMemo(() => syncedGoals.find(g => !g.isImmediate && !g.isUltimate && g.current < g.target), [syncedGoals])
+  const ultimateGoal = useMemo(() => syncedGoals.find(g => g.isUltimate), [syncedGoals])
+  const activeGoals = useMemo(() => syncedGoals.filter(g => g.active && g.deadline && g.current < g.target), [syncedGoals])
+
+  // ─── AI ACTION EXECUTOR ──────────────────────────────────────────────────────
+  const executeAIActions = (actions) => {
+    if (!Array.isArray(actions)) return { success: 0, failed: 0 }
+    let success = 0, failed = 0
+
+    actions.forEach(action => {
+      try {
+        switch (action.type) {
+          case 'UPDATE_CATEGORY': {
+            const cat = action.category || action.section
+            if (!CATEGORIES.includes(cat)) { failed++; break }
+            updateBudgetItem(cat, action.field || 'planned', action.value)
+            success++
+            break
+          }
+          case 'CREATE_CATEGORY': {
+            // Deprecated logically since we use fixed 13 categories
+            failed++
+            break
+          }
+          case 'UPDATE_GOAL': {
+            const goal = goals.find(g => g.name.toLowerCase() === (action.goalName || '').toLowerCase())
+            if (goal) {
+              updateGoal(goal.id, 'current', action.currentAmount)
+              success++
+            } else { failed++ }
+            break
+          }
+          default:
+            failed++
+        }
+      } catch (e) {
+        console.error('Action execution error:', e)
+        failed++
+      }
+    })
+
+    return { success, failed }
+  }
 
   return (
     <AppContext.Provider value={{
       budget, budgets, currentMonth, switchMonth: setCurrentMonth,
-      unassigned, unassignedPlanned,
+      unassigned, unassignedPlanned, globalSavingsActual,
       netWorthData, netWorth, totalAssets, totalLiabilities,
-      goals, transactions, healthScore,
+      goals: syncedGoals, transactions, healthScore,
       totalIncome, totalExpenses, totalSavings, totalInvesting,
       totalPlannedIncome, totalPlannedExpenses, totalPlannedSavings, totalPlannedInvesting,
-      updateBudgetItem, addBudgetItem, removeBudgetItem,
+      getActual, getPlanned, EXPENSE_CATEGORIES,
+      updateBudgetItem,
       updateNetWorthField: (type, field, value) => setNetWorthData(prev => ({ ...prev, [type]: { ...prev[type], [field]: Number(value) || 0 } })),
-      updateGoal, addGoal, removeGoal,
+      updateGoal, addGoal, removeGoal, startGoal, stopGoal,
       addTransaction, removeTransaction,
-      nextImmediateGoal, nextGoal, ultimateGoal,
+      nextImmediateGoal, nextGoal, ultimateGoal, activeGoals,
+      executeAIActions,
     }}>
       {children}
     </AppContext.Provider>

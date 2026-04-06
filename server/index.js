@@ -217,5 +217,150 @@ app.post('/api/sync_transactions', auditLogger('SYNC_TO_FIRESTORE'), async (req,
   }
 });
 
+// --- AI STRATEGIST ENDPOINT ---
+app.post('/api/ai/strategist', auditLogger('AI_STRATEGIST'), async (req, res) => {
+  const { message, financialData } = req.body;
+  if (!message) return res.status(400).json({ error: 'Missing message' });
+
+  const OPENAI_KEY = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  if (!OPENAI_KEY) return res.status(500).json({ error: 'AI not configured' });
+
+  try {
+    const systemPrompt = `You are a world-class financial strategist for the "Serants Wealth Plan".
+Your job is to analyze the user's financial data and generate actionable plans.
+
+ALWAYS respond in this EXACT format with two sections separated by "---ACTIONS---":
+
+SECTION 1 (Human Plan):
+A well-formatted financial plan using emojis and clear sections. Include:
+- Monthly budget overview
+- Weekly execution plan
+- Key recommendations
+
+SECTION 2 (Machine Actions):
+After the separator "---ACTIONS---", provide a valid JSON array of actions.
+Each action must be one of these types:
+
+1. UPDATE_CATEGORY - Update a budget category's planned amount
+   { "type": "UPDATE_CATEGORY", "section": "fixedBills|food|savings|investing|funMoney|income", "name": "Category Name", "field": "planned", "value": 500 }
+
+2. CREATE_CATEGORY - Create a new budget category  
+   { "type": "CREATE_CATEGORY", "section": "savings|investing|funMoney|fixedBills|food|income", "name": "New Category Name" }
+
+3. UPDATE_GOAL - Update a goal's current amount
+   { "type": "UPDATE_GOAL", "goalName": "Goal Name", "currentAmount": 5000 }
+
+If no actions are needed, return an empty array: []
+
+USER DATA:
+${JSON.stringify(financialData || {}, null, 2)}`;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://serantwealthplan.com',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-pro-1.5-exp',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ],
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errData = await response.text();
+      console.error('AI API error:', errData);
+      return res.status(500).json({ error: 'AI request failed' });
+    }
+
+    const data = await response.json();
+    const fullResponse = data.choices?.[0]?.message?.content || '';
+
+    // Parse the response into humanPlan and actions
+    let humanPlan = fullResponse;
+    let actions = [];
+
+    if (fullResponse.includes('---ACTIONS---')) {
+      const parts = fullResponse.split('---ACTIONS---');
+      humanPlan = parts[0].trim();
+      try {
+        const jsonStr = parts[1].trim().replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        actions = JSON.parse(jsonStr);
+        if (!Array.isArray(actions)) actions = [];
+      } catch (parseErr) {
+        console.warn('Failed to parse AI actions JSON:', parseErr.message);
+        actions = [];
+      }
+    }
+
+    res.json({ humanPlan, actions, raw: fullResponse });
+  } catch (error) {
+    console.error('AI Strategist error:', error);
+    res.status(500).json({ error: 'AI Strategist failed' });
+  }
+});
+
+// --- AI CATEGORIZE ENDPOINT ---
+app.post('/api/ai/categorize_transactions', auditLogger('AI_CATEGORIZE'), async (req, res) => {
+  const { transactions } = req.body;
+  if (!transactions || !Array.isArray(transactions)) return res.status(400).json({ error: 'Missing transactions' });
+
+  const OPENAI_KEY = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+  if (!OPENAI_KEY) return res.status(500).json({ error: 'AI not configured' });
+
+  if (transactions.length === 0) return res.json({});
+
+  // Limit batch size to protect tokens
+  const batch = transactions.slice(0, 100);
+
+  try {
+    const categories = ['Income', 'Housing', 'Bills & Utilities', 'Food & Dining', 'Transportation', 'Insurance', 'Subscriptions', 'Shopping', 'Entertainment', 'Healthcare', 'Savings', 'Investing', 'Other'];
+    
+    const systemPrompt = `You are a financial categorizer. Categorize the given list of transactions into EXACTLY one of these exact categories:
+${categories.join(', ')}
+
+Return ONLY a valid JSON object map where keys are the transaction IDs and values are the exact category names. Do not include markdown backticks like \`\`\`json. Return bare JSON.`;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://serantwealthplan.com',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-pro-1.5-exp',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: JSON.stringify(batch) }
+        ],
+        max_tokens: 2000,
+      }),
+    });
+
+    if (!response.ok) throw new Error('AI categorize failed');
+
+    const data = await response.json();
+    const fullResponse = data.choices?.[0]?.message?.content || '{}';
+    
+    let catMap = {};
+    try {
+      catMap = JSON.parse(fullResponse.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim());
+    } catch (parseErr) {
+      console.warn('Failed to parse AI categorize JSON:', parseErr.message);
+    }
+
+    res.json(catMap);
+  } catch (error) {
+    console.error('AI Categorizer error:', error);
+    res.status(500).json({ error: 'AI Categorizer failed' });
+  }
+});
+
 const PORT = 3001;
 app.listen(PORT, () => console.log(`🔒 SECURE Plaid server running on port ${PORT}`));

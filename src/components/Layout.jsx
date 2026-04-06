@@ -1,13 +1,13 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
+import MidasPanel from './MidasPanel'
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: 'home' },
   { path: '/budget', label: 'Budget', icon: 'grid_view' },
   { path: '/transactions', label: 'Trans', icon: 'receipt' },
-  { path: '/analytics', label: 'Analyt', icon: 'trending_up' },
   { path: '/goals', label: 'Goals', icon: 'flag' },
-  { path: '/invest', label: 'Invest', icon: 'show_chart' },
+  { path: '/settings', label: 'Settings', icon: 'settings' },
 ]
 
 export default function Layout({ children }) {
@@ -18,6 +18,10 @@ export default function Layout({ children }) {
       <main className="flex-1 overflow-y-auto pb-24">
         {children}
       </main>
+
+      {/* MIDAS — Global AI Panel */}
+      <MidasPanel />
+
       <nav className="fixed bottom-0 left-0 right-0 bg-surface border-t border-outline-variant z-50">
         <div className="flex justify-around items-center h-16 max-w-2xl mx-auto px-2">
           {navItems.map(({ path, label, icon }) => {

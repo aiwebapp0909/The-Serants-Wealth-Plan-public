@@ -9,6 +9,8 @@ import Goals from './pages/Goals'
 import Invest from './pages/Invest'
 import Tools from './pages/Tools'
 import Transactions from './pages/Transactions'
+import AIPlanner from './pages/AIPlanner'
+import Settings from './pages/Settings'
 import Login from './pages/Login'
 
 function AppContent() {
@@ -45,6 +47,8 @@ function AppContent() {
           <Route path="/goals" element={<Goals />} />
           <Route path="/invest" element={<Invest />} />
           <Route path="/tools" element={<Tools />} />
+          <Route path="/planner" element={<AIPlanner />} />
+          <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

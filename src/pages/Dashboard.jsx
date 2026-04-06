@@ -1,18 +1,21 @@
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import { useAuth } from '../context/AuthContext'
 import { useAI } from '../hooks/useAI'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { db } from '../firebase'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import {
+  BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+} from 'recharts'
 import CoachChat from '../components/CoachChat'
-import WealthProjection from '../components/WealthProjection'
 
 function fmt(n) {
   if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
   if (Math.abs(n) >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
-  return `$${n.toLocaleString()}`
+  return `$${Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2 })}`
 }
 
 function pct(current, target) {
@@ -20,20 +23,28 @@ function pct(current, target) {
   return Math.min(100, Math.round((current / target) * 100))
 }
 
+const PIE_COLORS = ['#5D5FEF', '#00E676', '#FF5252', '#FF9800', '#C1C1FF', '#D4AF37']
+
 export default function Dashboard() {
   const {
     netWorth, totalAssets, totalLiabilities,
     totalIncome, totalExpenses, totalSavings, totalInvesting,
-    nextImmediateGoal, nextGoal, ultimateGoal,
-    healthScore, unassigned
+    budget, activeGoals, healthScore, getActual,
+    currentMonth, switchMonth
   } = useApp()
   
   const { user, logout } = useAuth()
   const { insight, loading: aiLoading, generateInsight } = useAI()
   const [showSyncModal, setShowSyncModal] = useState(false)
   const [showCoachChat, setShowCoachChat] = useState(false)
-  const [realSpending, setRealSpending] = useState(0)
-  const [isOverBudget, setIsOverBudget] = useState(false)
+  const [transactions, setTransactions] = useState([])
+  const [flowPeriod, setFlowPeriod] = useState('6M')
+  const [txFilter, setTxFilter] = useState('All')
+
+  const totalSaved = useMemo(() => totalSavings + totalInvesting, [totalSavings, totalInvesting])
+  const savingsGoalTotal = useMemo(() => {
+    return activeGoals.reduce((s, g) => s + (g.current || 0), 0)
+  }, [activeGoals])
 
   useEffect(() => {
     if (user && !insight && !aiLoading) {
@@ -41,266 +52,460 @@ export default function Dashboard() {
         netWorth: Math.abs(netWorth),
         income: totalIncome,
         expenses: totalExpenses,
-        savings: totalSavings + totalInvesting,
+        savings: totalSaved,
         healthScore,
-        nextGoal: nextImmediateGoal?.name || 'Emergency Fund'
       })
     }
-  }, [user, netWorth, totalIncome, totalExpenses, healthScore, nextImmediateGoal])
+  }, [user])
 
-  // Fetch real spending from Firestore transactions
+  // Fetch recent transactions from Firestore
   useEffect(() => {
     if (!user) return
-
-    const now = new Date()
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-    const monthEnd = now.toISOString().split('T')[0]
-
-    const q = query(
-      collection(db, 'transactions'),
-      where('userId', '==', user.uid)
-    )
-
+    const q = query(collection(db, 'transactions'), where('userId', '==', user.uid))
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      let monthlyTotal = 0
-      snapshot.docs.forEach((doc) => {
-        const tx = doc.data()
-        if (tx.date >= monthStart && tx.date <= monthEnd) {
-          monthlyTotal += tx.amount || 0
-        }
-      })
-      setRealSpending(monthlyTotal)
-      setIsOverBudget(monthlyTotal > totalExpenses)
+      const txs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      txs.sort((a, b) => new Date(b.date) - new Date(a.date))
+      setTransactions(txs)
     })
-
     return unsubscribe
-  }, [user, totalExpenses])
+  }, [user])
+
+  const filteredTransactions = useMemo(() => {
+    let filtered = transactions
+    if (txFilter === 'Income') filtered = filtered.filter(t => t.isExpense === false)
+    if (txFilter === 'Expense') filtered = filtered.filter(t => t.isExpense !== false)
+    return filtered.slice(0, 7) // Show top 7 recent
+  }, [transactions, txFilter])
+
+  // Month selector logic
+  const months = useMemo(() => {
+    const res = []
+    const now = new Date()
+    for (let i = -6; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1)
+      res.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+    return res
+  }, [])
+
+  const monthDisplay = useMemo(() => {
+    const [year, month] = currentMonth.split('-')
+    const now = new Date()
+    const isCurrent = now.getFullYear() === Number(year) && now.getMonth() + 1 === Number(month)
+    return isCurrent ? 'This Month' : new Date(year, month - 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  }, [currentMonth])
+
+  // Last month comparison mathematically
+  const diffs = useMemo(() => {
+    const [year, month] = currentMonth.split('-')
+    const d = new Date(year, month - 1, 1)
+    d.setMonth(d.getMonth() - 1)
+    const prevStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+
+    const prevTxs = transactions.filter(t => t.date && t.date.startsWith(prevStr))
+    const prevInc = prevTxs.filter(t => !t.isExpense).reduce((a, t) => a + Math.abs(t.amount || 0), 0)
+    const prevExp = prevTxs.filter(t => t.isExpense).reduce((a, t) => a + Math.abs(t.amount || 0), 0)
+    const prevSav = prevTxs.filter(t => t.category === 'Savings' || t.category === 'Investing').reduce((a, t) => a + Math.abs(t.amount || 0), 0)
+
+    const calcObj = (current, prev) => {
+      if (prev === 0) return { val: 0, text: 'vs last month' }
+      const diff = ((current - prev) / prev) * 100
+      return { val: diff, text: `${diff > 0 ? '+' : ''}${diff.toFixed(1)}% vs last month` }
+    }
+
+    return {
+      income: calcObj(totalIncome, prevInc),
+      expense: calcObj(totalExpenses, prevExp),
+      savings: calcObj(totalSaved, prevSav)
+    }
+  }, [transactions, currentMonth, totalIncome, totalExpenses, totalSaved])
+
+  // Money flow chart data
+  const flowData = useMemo(() => {
+    const mCount = flowPeriod === '3M' ? 3 : flowPeriod === '6M' ? 6 : 12
+    const data = []
+    for (let i = mCount - 1; i >= 0; i--) {
+      const d = new Date()
+      d.setMonth(d.getMonth() - i)
+      const mStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      
+      const monTxs = transactions.filter(t => t.date && t.date.startsWith(mStr))
+      const mInc = monTxs.filter(t => !t.isExpense).reduce((a, t) => a + Math.abs(t.amount || 0), 0)
+      const mExp = monTxs.filter(t => t.isExpense).reduce((a, t) => a + Math.abs(t.amount || 0), 0)
+
+      data.push({
+        month: d.toLocaleDateString('en-US', { month: 'short' }),
+        Income: mInc,
+        Expense: mExp,
+      })
+    }
+    // ensure current month gets contextual data if not synced yet
+    if (data.length > 0) {
+      data[data.length - 1].Income = Math.max(data[data.length - 1].Income, totalIncome)
+      data[data.length - 1].Expense = Math.max(data[data.length - 1].Expense, totalExpenses)
+    }
+    return data
+  }, [flowPeriod, transactions, totalIncome, totalExpenses])
+
+  // Budget breakdown data
+  const spendingData = useMemo(() => {
+    if (!getActual) return []
+    return [
+      { name: 'Housing', value: Math.abs(getActual('Housing')) },
+      { name: 'Bills & Util', value: Math.abs(getActual('Bills & Utilities')) },
+      { name: 'Food & Dining', value: Math.abs(getActual('Food & Dining')) },
+      { name: 'Transport', value: Math.abs(getActual('Transportation')) },
+      { name: 'Shopping', value: Math.abs(getActual('Shopping')) },
+      { name: 'Entertainment', value: Math.abs(getActual('Entertainment')) },
+      { name: 'Other', value: Math.abs(getActual('Other')) }
+    ].filter(d => d.value > 0)
+  }, [budget, getActual])
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null
+    return (
+      <div className="bg-surface border border-outline-variant rounded-xl p-3 shadow-xl">
+        <p className="text-gray-400 text-xs mb-1">{label}</p>
+        {payload.map((p, i) => (
+          <p key={i} className="text-xs font-body font-bold" style={{ color: p.fill || p.color }}>
+            {p.name}: {fmt(p.value)}
+          </p>
+        ))}
+      </div>
+    )
+  }
+
+  const TrendPill = ({ diff, isGoodPositive = true }) => {
+    if (!diff.val) return <span className="text-[10px] text-gray-500 font-body">N/A vs last month</span>
+    const isGood = isGoodPositive ? diff.val >= 0 : diff.val <= 0
+    return (
+      <span className={`text-[10px] font-body font-bold px-2 py-0.5 rounded-full mr-1 
+        ${isGood ? 'bg-success/10 text-success' : 'bg-error/10 text-error'}`}
+      >
+        <span className="material-symbols-outlined text-[10px] align-middle mr-0.5">
+          {diff.val >= 0 ? 'trending_up' : 'trending_down'}
+        </span>
+        {diff.text.split(' ')[0]}
+      </span>
+    )
+  }
 
   return (
     <div className="bg-background min-h-screen">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-5 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20">
-              <span className="material-symbols-outlined text-background text-xl font-bold">handshake</span>
-            </div>
-            <div className="absolute -top-1 -right-1">
-               <span className="material-symbols-outlined text-amber-500 text-[14px]">star</span>
-            </div>
-          </div>
-          <div>
-            <h1 className="font-headline font-bold text-on-surface text-lg leading-tight uppercase tracking-tight">Serant Wealth</h1>
-            <p className="text-[8px] font-body font-bold text-amber-500 uppercase tracking-widest -mt-1">Operating System</p>
-          </div>
+      {/* PERFECTLY MATCHED HEADER */}
+      <div className="flex items-center justify-between px-6 pt-8 pb-6">
+        <div>
+          <h1 className="font-headline font-bold text-on-surface text-3xl leading-tight inline-flex items-center gap-2">
+            Welcome back, {user?.displayName || 'User'}! <span>👋</span>
+          </h1>
+          <p className="text-sm font-body text-gray-400 mt-1">Here's a snapshot of your finances.</p>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-on-surface">
-            <span className="material-symbols-outlined text-xl">notifications</span>
-          </button>
+        <div className="flex items-center gap-4">
           <button 
             onClick={() => setShowSyncModal(true)}
-            className="flex items-center gap-1.5 border rounded-full px-3 py-1.5 text-xs font-body font-bold transition-all bg-success/10 border-success/40 text-success"
+            className="flex items-center justify-center w-10 h-10 rounded-full border border-success/40 bg-success/10 text-success hover:bg-success/20 transition-colors"
+            title="Account Connected"
           >
-            <span className="text-success text-[10px]">●</span>
-            Connected
+            <span className="material-symbols-outlined text-xl">account_balance</span>
           </button>
+          <div className="relative">
+            <select
+              value={currentMonth}
+              onChange={(e) => switchMonth(e.target.value)}
+              className="appearance-none bg-surface-container border border-outline-variant hover:border-primary/50 text-on-surface font-body font-bold text-sm rounded-xl pl-4 pr-10 py-2.5 outline-none cursor-pointer transition-all"
+            >
+              {months.map(m => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </select>
+            <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-base">calendar_today</span>
+          </div>
         </div>
       </div>
 
-      <div className="px-4 space-y-3 pb-24">
-        {/* ROW 1: GOALS GRID */}
-        <div className="grid grid-cols-2 gap-3">
-          <Link to="/goals">
-            <div className="bg-surface border border-outline-variant rounded-2xl p-4 h-36 flex flex-col justify-between relative overflow-hidden active:scale-[0.98] transition-all">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest">Next Immediate</span>
-                  <span className="material-symbols-outlined text-gray-600 text-[16px]">my_location</span>
-                </div>
-                <h3 className="font-headline font-bold text-on-surface text-lg leading-tight">
-                  {nextImmediateGoal?.name || 'Starter EF'}
-                </h3>
-              </div>
-              <div className="h-1 bg-surface-container-high rounded-full overflow-hidden">
-                <motion.div initial={{ width: 0 }} animate={{ width: `${pct(nextImmediateGoal?.current, nextImmediateGoal?.target)}%` }} className="h-full bg-primary rounded-full" />
-              </div>
+      <div className="px-6 space-y-5 pb-24">
+        {/* ROW 1: 4 STAT CARDS (Matched exact values & styling intent) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Total Balance */}
+          <Link to="/analytics" className="bg-surface border border-outline-variant rounded-2xl p-5 hover:border-primary/30 transition-all active:scale-[0.98] shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[13px] font-body text-gray-400">Total Balance</p>
+              <span className="material-symbols-outlined text-gray-500 text-sm">north_east</span>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+              <span className="material-symbols-outlined text-primary text-[15px]">account_balance_wallet</span>
+            </div>
+            <h2 className="font-headline font-bold text-on-surface text-3xl mb-1">{fmt(netWorth)}</h2>
+            <p className="text-[11px] font-body text-gray-500">All-time net balance</p>
+          </Link>
+
+          {/* Income */}
+          <Link to="/budget" className="bg-surface border border-outline-variant rounded-2xl p-5 hover:border-success/30 transition-all active:scale-[0.98] shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[13px] font-body text-gray-400">Income</p>
+              <span className="material-symbols-outlined text-gray-500 text-sm">north_east</span>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-success/10 flex items-center justify-center mb-3">
+              <span className="material-symbols-outlined text-success text-[15px]">trending_up</span>
+            </div>
+            <h2 className="font-headline font-bold text-on-surface text-3xl mb-1">{fmt(totalIncome)}</h2>
+            <div className="flex items-center text-gray-500 text-[11px] font-body mt-2">
+              <TrendPill diff={diffs.income} isGoodPositive={true} /> 
+              {diffs.income.val !== 0 && 'vs last month'}
             </div>
           </Link>
 
-          <Link to="/goals">
-            <div className="bg-surface border border-outline-variant rounded-2xl p-4 h-36 flex flex-col justify-between active:scale-[0.98] transition-all">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest">Next Milestone</span>
-                  <span className="material-symbols-outlined text-gray-600 text-[16px]">tune</span>
-                </div>
-                {nextGoal ? (
-                  <>
-                     <h3 className="font-headline font-bold text-on-surface text-sm leading-tight">{nextGoal.name}</h3>
-                     <p className="text-gray-500 text-[10px] font-body mt-1 line-clamp-2">{nextGoal.description}</p>
-                  </>
-                ) : (
-                  <p className="text-gray-500 text-[10px] font-body">All goals complete!</p>
-                )}
-              </div>
+          {/* Expenses */}
+          <Link to="/budget" className="bg-surface border border-outline-variant rounded-2xl p-5 hover:border-error/30 transition-all active:scale-[0.98] shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[13px] font-body text-gray-400">Expenses</p>
+              <span className="material-symbols-outlined text-gray-500 text-sm">north_east</span>
             </div>
-          </Link>
-        </div>
-
-        {/* ROW 2: LEFT TO PLAN + HEALTH GRID */}
-        <div className="grid grid-cols-2 gap-3">
-          <Link to="/budget">
-            <div className="bg-surface border border-outline-variant rounded-2xl p-4 h-36 flex flex-col justify-between cursor-pointer active:bg-surface-container transition-all">
-              <div>
-                <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest mb-2">Left to Plan</p>
-                <h2 className={`font-headline font-bold text-3xl ${unassigned > 0 ? 'text-primary' : unassigned < 0 ? 'text-error' : 'text-success'}`}>
-                  {fmt(unassigned)}
-                </h2>
-              </div>
-              <div className="space-y-1">
-                <div className="flex justify-between items-center text-[9px] font-body">
-                  <span className="text-gray-500 uppercase font-bold tracking-widest">Unassigned</span>
-                  <span className={unassigned !== 0 ? 'text-primary font-bold' : 'text-success font-bold'}>{unassigned === 0 ? 'Perfect ✅' : fmt(unassigned)}</span>
-                </div>
-                <div className="flex justify-between items-center text-[9px] font-body">
-                  <span className="text-on-surface/60 font-medium">NW: {fmt(netWorth)}</span>
-                </div>
-              </div>
+            <div className="w-8 h-8 rounded-full bg-error/10 flex items-center justify-center mb-3">
+              <span className="material-symbols-outlined text-error text-[15px]">trending_down</span>
+            </div>
+            <h2 className="font-headline font-bold text-on-surface text-3xl mb-1">{fmt(totalExpenses)}</h2>
+            <div className="flex items-center text-gray-500 text-[11px] font-body mt-2">
+              <TrendPill diff={diffs.expense} isGoodPositive={false} /> 
+              {diffs.expense.val !== 0 && 'vs last month'}
             </div>
           </Link>
 
-          <Link to="/analytics">
-            <div className="bg-surface border border-outline-variant rounded-2xl p-4 h-36 flex flex-col justify-between relative cursor-pointer active:bg-surface-container transition-all">
-               <div className="absolute top-4 right-4 text-[8px] font-body font-bold text-amber-500 border border-amber-500/30 px-1.5 py-0.5 rounded">
-                 HEALTH
-               </div>
-               <div>
-                  <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest mb-2">Score</p>
-                  <h2 className="font-headline font-bold text-on-surface text-4xl">{healthScore}</h2>
-               </div>
-               <div className="h-1.5 bg-surface-container-high rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${healthScore}%` }} className={`h-full rounded-full ${healthScore >= 70 ? 'bg-success' : 'bg-amber-500'}`} />
-               </div>
+          {/* Total Savings */}
+          <Link to="/goals" className="bg-surface border border-outline-variant rounded-2xl p-5 hover:border-secondary/30 transition-all active:scale-[0.98] shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[13px] font-body text-gray-400">Total Savings</p>
+              <span className="material-symbols-outlined text-gray-500 text-sm">north_east</span>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-secondary/10 flex items-center justify-center mb-3">
+              <span className="material-symbols-outlined text-secondary text-[15px]">savings</span>
+            </div>
+            <h2 className="font-headline font-bold text-on-surface text-3xl mb-1">{fmt(totalSaved)}</h2>
+            <div className="text-[10px] font-body text-gray-400 mb-2">
+              🎯 <span className="text-secondary font-bold">${savingsGoalTotal.toLocaleString()}</span> saved toward goals
+            </div>
+            <div className="flex items-center text-gray-500 text-[11px] font-body mt-1.5">
+              <TrendPill diff={diffs.savings} isGoodPositive={true} /> 
+              {diffs.savings.val !== 0 && 'vs last month'}
             </div>
           </Link>
         </div>
 
-        {/* ROW 2.5: REAL SPENDING */}
-        <Link to="/transactions">
-          <div className={`bg-surface border rounded-2xl p-4 relative cursor-pointer active:scale-[0.98] transition-all ${isOverBudget ? 'border-error/40 bg-error/5' : 'border-outline-variant'}`}>
-            <div className="absolute top-4 right-4 text-[8px] font-body font-bold px-2 py-1 rounded bg-surface-container-high">
-              THIS MONTH
-            </div>
-            <div className="mb-4">
-              <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest mb-2">Real Spending</p>
-              <h2 className={`font-headline font-bold text-3xl ${isOverBudget ? 'text-error' : 'text-success'}`}>
-                {fmt(realSpending)}
-              </h2>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between items-center text-[9px] font-body">
-                <span className="text-gray-500 uppercase font-bold tracking-widest">Budget</span>
-                <span className="text-on-surface font-bold">{fmt(totalExpenses)}</span>
-              </div>
-              {isOverBudget && (
-                <div className="flex justify-between items-center text-[9px] font-body bg-error/10 p-2 rounded border border-error/20">
-                  <span className="text-error uppercase font-bold tracking-widest">Over by</span>
-                  <span className="text-error font-bold">{fmt(realSpending - totalExpenses)}</span>
-                </div>
-              )}
-              {!isOverBudget && (
-                <div className="h-1 bg-surface-container-high rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }} 
-                    animate={{ width: `${Math.min(100, (realSpending / totalExpenses) * 100)}%` }} 
-                    className="h-full bg-success rounded-full" 
-                  />
-                </div>
-              )}
-            </div>
-          </div>
-        </Link>
-
-        {/* ROW 3: ULTIMATE GOAL (CAROUSEL STYLE) */}
-        <div className="bg-surface border border-outline-variant rounded-2xl p-5 relative overflow-hidden bg-gradient-to-br from-surface to-[#1A1B23]">
-           <div className="absolute top-0 right-0 p-5 opacity-5">
-              <span className="material-symbols-outlined text-7xl font-bold">stars</span>
-           </div>
-           <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest mb-3">Roadmap Target</p>
-           <div className="flex items-end justify-between mb-4">
+        {/* ROW 2: MONEY FLOW + BUDGET BREAKDOWN */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+          {/* Money Flow Chart */}
+          <div className="lg:col-span-3 bg-surface border border-outline-variant rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
               <div>
-                 <h2 className="font-headline font-bold text-on-surface text-4xl">{ultimateGoal ? fmt(ultimateGoal.target) : '$20.0M'}</h2>
-                 <p className="text-gray-500 text-[10px] font-body uppercase tracking-widest mt-1">Financial Freedom</p>
+                <h3 className="font-headline font-bold text-on-surface text-base">Money Flow</h3>
+                <div className="flex items-center gap-4 mt-2">
+                  <div className="flex items-center gap-1.5">
+                     <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+                     <span className="text-[11px] font-body text-gray-400">Income</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                     <div className="w-2.5 h-2.5 rounded-full bg-[#8b8cf8]" />
+                     <span className="text-[11px] font-body text-gray-400">Expense</span>
+                  </div>
+                </div>
               </div>
-              <div className="text-right">
-                 <p className="font-headline font-bold text-primary text-xl">{pct(netWorth, ultimateGoal?.target)}%</p>
-                 <p className="text-[8px] font-body font-bold text-gray-500 uppercase tracking-widest">Complete</p>
+              <div className="flex gap-1 bg-surface-container rounded-full p-1 border border-outline-variant/50">
+                {['3M', '6M', '1Y'].map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setFlowPeriod(p)}
+                    className={`text-[10px] font-body font-bold px-4 py-1.5 rounded-full transition-all ${
+                      flowPeriod === p ? 'bg-primary text-background shadow-sm' : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    {p === '3M' ? '3 Months' : p === '6M' ? '6 Months' : '1 Year'}
+                  </button>
+                ))}
               </div>
-           </div>
-           <div className="h-2 bg-surface-container-high rounded-full overflow-hidden">
-              <motion.div initial={{ width: 0 }} animate={{ width: `${pct(netWorth, ultimateGoal?.target)}%` }} className="h-full bg-primary rounded-full" />
-           </div>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={flowData} barGap={6}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#222230" vertical={false} />
+                <XAxis dataKey="month" tick={{ fill: '#666', fontSize: 11 }} axisLine={false} tickLine={false} dy={10} />
+                <YAxis tick={{ fill: '#666', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} dx={-10} />
+                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />
+                <Bar dataKey="Income" fill="#D4AF37" radius={[4, 4, 0, 0]} maxBarSize={45} />
+                <Bar dataKey="Expense" fill="#8b8cf8" radius={[4, 4, 0, 0]} maxBarSize={45} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Budget Breakdown */}
+          <div className="lg:col-span-2 bg-surface border border-outline-variant rounded-2xl p-6 shadow-sm flex flex-col">
+            <h3 className="font-headline font-bold text-on-surface text-base mb-1">Budget Breakdown</h3>
+            <p className="text-[11px] font-body text-gray-400 mb-6">Expenses by category this month</p>
+            
+            {spendingData.length > 0 ? (
+              <div className="flex-1 flex flex-col justify-center">
+                <div className="flex justify-center mb-6">
+                  <ResponsiveContainer width={180} height={180}>
+                    <PieChart>
+                      <Pie data={spendingData} cx="50%" cy="50%" innerRadius={55} outerRadius={85} dataKey="value" strokeWidth={0} paddingAngle={2}>
+                        {spendingData.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-surface-container/20 rounded-xl">
+                <span className="material-symbols-outlined text-gray-500 text-4xl mb-3 opacity-50">pie_chart</span>
+                <p className="text-gray-400 text-xs">Connect a bank to see breakdown</p>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* ROW 4: WEALTH PROJECTION */}
-        <WealthProjection 
-          totalInvesting={totalInvesting} 
-          netWorth={netWorth}
-          totalSavings={totalSavings}
-        />
+        {/* ROW 3: RECENT TRANSACTIONS + SAVING GOALS */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
+          {/* Recent Transactions */}
+          <div className="lg:col-span-3 bg-surface border border-outline-variant rounded-2xl overflow-hidden shadow-sm flex flex-col pb-2">
+            <div className="px-6 py-5 flex items-center justify-between border-b border-outline-variant/50">
+              <h3 className="font-headline font-bold text-on-surface text-base">Recent Transactions</h3>
+              <div className="flex gap-1 bg-surface-container rounded-full p-1 border border-outline-variant/30">
+                {['All', 'Income', 'Expense'].map(f => (
+                  <button
+                    key={f}
+                    onClick={() => setTxFilter(f)}
+                    className={`text-[10px] font-body font-bold px-3 py-1 rounded-full transition-all ${
+                      txFilter === f ? 'bg-primary/20 text-primary shadow-sm' : 'text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {filteredTransactions.length > 0 ? (
+              <div className="flex-1 overflow-x-auto p-4 pt-2">
+                <table className="w-full">
+                  <thead>
+                    <tr className="text-[9px] font-body text-primary uppercase tracking-widest font-bold mb-2">
+                      <th className="text-left px-3 py-3 w-1/3">Name</th>
+                      <th className="text-left px-3 py-3 w-1/4">Date</th>
+                      <th className="text-left px-3 py-3 w-1/6">Type</th>
+                      <th className="text-right px-3 py-3 w-1/4">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTransactions.map((tx, i) => (
+                      <tr key={tx.id} className={`group transition-colors ${i !== filteredTransactions.length - 1 ? 'border-b border-outline-variant/30' : ''}`}>
+                        <td className="px-3 py-3.5">
+                          <p className="text-[13px] font-body text-on-surface font-medium truncate">{tx.merchant || tx.name}</p>
+                          <p className="text-[11px] text-gray-500 truncate mt-0.5">{tx.category || 'Uncategorized'}</p>
+                        </td>
+                        <td className="px-3 py-3.5 text-xs text-gray-400">{tx.date}</td>
+                        <td className="px-3 py-3.5">
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${
+                            tx.isExpense === false ? 'bg-success/10 text-success border-success/20' : 'bg-error/10 text-error border-error/20'
+                          }`}>
+                            {tx.isExpense === false ? 'income' : 'expense'}
+                          </span>
+                        </td>
+                        <td className={`px-3 py-3.5 text-[13px] text-right font-body font-bold ${
+                          tx.isExpense === false ? 'text-success' : 'text-error'
+                        }`}>
+                          {tx.isExpense === false ? '+' : '-'}{fmt(tx.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-12 text-center">
+                <span className="material-symbols-outlined text-gray-600 text-3xl mb-3 opacity-50">receipt</span>
+                <p className="text-gray-500 text-[13px]">No recent transactions found.</p>
+              </div>
+            )}
+          </div>
 
-        {/* ROW 5: COACH INSIGHT (CLICKABLE) */}
-        <motion.button 
-          onClick={() => setShowCoachChat(true)}
-          initial={{ opacity: 0, scale: 0.95 }} 
-          animate={{ opacity: 1, scale: 1 }} 
-          className="w-full bg-primary/5 border border-primary/20 rounded-2xl p-4 flex gap-4 hover:border-primary/40 hover:bg-primary/10 transition-all active:scale-[0.98]"
-        >
-          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-            <span className="material-symbols-outlined text-primary text-xl">psychology</span>
+          {/* Saving Goals */}
+          <div className="lg:col-span-2 bg-surface border border-outline-variant rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="font-headline font-bold text-on-surface text-base">Saving Goals</h3>
+              <span className="text-[11px] font-body text-gray-500">{activeGoals.length} goals</span>
+            </div>
+            
+            {activeGoals.length > 0 ? (
+              <div className="space-y-6">
+                {activeGoals.slice(0, 3).map(goal => {
+                  const progress = pct(goal.current, goal.target)
+                  // Colors logic matches reference UI progress bar logic: simple uniform bar colors.
+                  const barColor = 'bg-[#5D5FEF]'
+
+                  return (
+                    <div key={goal.id} className="group">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 overflow-hidden mr-2">
+                           {goal.name.toLowerCase().includes('car') && <span className="text-base flex-shrink-0">🚗</span>}
+                           {goal.name.toLowerCase().includes('vacation') && <span className="text-base flex-shrink-0">🏖️</span>}
+                           {goal.name.toLowerCase().includes('emergency') && <span className="text-base flex-shrink-0">🏠</span>}
+                           {(!goal.name.toLowerCase().match(/car|vacation|emergency/)) && <span className="text-base flex-shrink-0">🎯</span>}
+                           
+                           <p className="text-[13px] font-body text-on-surface font-medium truncate">{goal.name}</p>
+                        </div>
+                        <p className="text-[11px] font-body text-gray-500 flex-shrink-0 text-right min-w-[100px]">
+                          {fmt(goal.current)} / <span className="text-on-surface font-bold">{fmt(goal.target)}</span>
+                        </p>
+                      </div>
+                      <div className="h-2.5 bg-surface-container-high rounded-full overflow-hidden mb-1.5 flex shadow-inner">
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progress}%` }}
+                          className={`h-full rounded-full ${barColor}`}
+                        />
+                      </div>
+                      <p className="text-right text-[10px] font-body font-bold text-gray-500">{progress}%</p>
+                    </div>
+                  )
+                })}
+                <Link to="/goals" className="text-primary text-[11px] font-body font-bold hover:underline block pt-2">
+                  See all goals →
+                </Link>
+              </div>
+            ) : (
+              <div className="text-center py-10 bg-surface-container/20 rounded-xl">
+                <span className="material-symbols-outlined text-gray-500 text-3xl mb-3 opacity-50">flag</span>
+                <p className="text-gray-400 text-xs mb-3">No active goals yet.</p>
+                <Link to="/goals" className="inline-block bg-primary text-background font-bold text-[10px] px-4 py-2 rounded-full shadow hover:bg-primary/90 transition-colors">
+                  Create a Goal
+                </Link>
+              </div>
+            )}
           </div>
-          <div className="flex-1 text-left">
-             <div className="flex items-center justify-between mb-1">
-                <p className="text-[9px] font-body font-bold text-primary uppercase tracking-widest">Coach Insight</p>
-                {aiLoading && <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />}
-             </div>
-             <p className="text-xs font-body text-on-surface/80 italic leading-relaxed text-left">"{insight || 'Synthesizing your path to freedom...'}"</p>
-          </div>
-          <div className="flex items-center justify-center">
-            <span className="material-symbols-outlined text-primary/60">chevron_right</span>
-          </div>
-        </motion.button>
+        </div>
+
       </div>
 
-      {/* ACCOUNT INFO MODAL */}
-      <AnimatePresence>
-        {showSyncModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSyncModal(false)} className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-sm bg-surface border border-outline-variant rounded-3xl p-6 shadow-2xl">
-              <h2 className="font-headline font-bold text-on-surface text-xl mb-6 text-center">Account Status</h2>
-              <div className="space-y-4">
-                <div className="bg-surface-container p-5 rounded-2xl border border-outline-variant">
-                  <p className="text-[10px] font-body text-gray-500 uppercase tracking-widest mb-1">Logged In As</p>
-                  <p className="font-headline font-bold text-primary text-sm tracking-wide">{user?.email}</p>
-                </div>
-                <div className="bg-surface-container p-5 rounded-2xl border border-outline-variant">
-                  <p className="text-[10px] font-body text-gray-500 uppercase tracking-widest mb-1">User ID</p>
-                  <p className="font-mono text-xs text-gray-400 break-all">{user?.uid}</p>
-                </div>
-                <p className="text-[10px] text-gray-500 text-center font-body uppercase tracking-wider px-2">All data is secure and tied to your account.</p>
-                <div className="flex gap-2 pt-4">
-                   <button onClick={() => setShowSyncModal(false)} className="flex-1 bg-surface-container border border-outline-variant rounded-xl py-4 text-xs font-bold font-headline">CLOSE</button>
-                   <button onClick={logout} className="flex-1 bg-error/10 border border-error/20 text-error rounded-xl py-4 text-xs font-bold font-headline">LOGOUT</button>
-                </div>
+      {/* MODALS */}
+      {showSyncModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} onClick={() => setShowSyncModal(false)} className="absolute inset-0 bg-background/80 backdrop-blur-sm" />
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm bg-surface border border-outline-variant rounded-3xl p-6 shadow-2xl">
+            <h2 className="font-headline font-bold text-on-surface text-xl mb-6 text-center">Account Status</h2>
+            <div className="space-y-4">
+              <div className="bg-surface-container p-5 rounded-2xl border border-outline-variant">
+                <p className="text-[10px] font-body text-gray-500 uppercase tracking-widest mb-1">Logged In As</p>
+                <p className="font-headline font-bold text-primary text-sm tracking-wide">{user?.email}</p>
               </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+              <div className="text-center mt-6">
+                 <button onClick={logout} className="w-full bg-error/10 border border-error/20 text-error rounded-xl py-3 text-sm font-bold font-headline hover:bg-error/20 transition-colors">LOGOUT</button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
-      {/* Coach Chat Modal */}
+      {/* Coach Chat Overlay */}
       <CoachChat 
         isOpen={showCoachChat}
         onClose={() => setShowCoachChat(false)}

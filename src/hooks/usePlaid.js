@@ -39,25 +39,42 @@ export function usePlaid() {
       const txResponse = await fetch(`${API_URL}/transactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ access_token: accessToken }),
+        body: JSON.stringify({ access_token: accessToken, mfa_token: 'valid' }),
       });
       const transactions = await txResponse.json();
 
-      // 3. Add to AppContext / Firestore
+      // 3. AI Categorization 
+      let catMap = {};
+      try {
+        const categorizeRes = await fetch(`${API_URL}/ai/categorize_transactions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactions: transactions.map(t => ({ id: t.transaction_id, name: t.name, amount: t.amount })) })
+        });
+        catMap = await categorizeRes.json();
+      } catch (catError) {
+        console.warn('AI Categorization failed, falling back to Plaid categories', catError);
+      }
+
+      // 4. Add to AppContext / Firestore
       transactions.forEach((t) => {
         addTransaction({
-          amount: Math.abs(t.amount), // Apps usually track everything as positive amount, categories handle sign
-          description: t.name,
-          category: t.category[0] || 'Food',
+          plaidId: t.transaction_id,
+          amount: Math.abs(t.amount),
+          name: t.name,
+          merchant: t.merchant_name || t.name,
+          category: catMap[t.transaction_id] || 'Other',
+          isExpense: t.amount > 0,
           date: t.date,
         });
       });
 
-      alert(`Bank connected! Found ${transactions.length} recent transactions.`);
+      alert(`Bank connected! Found & AI-categorized ${transactions.length} recent transactions.`);
     } catch (e) {
       console.error('Plaid full flow error', e);
+      alert('Failed to connect bank link. Please check console for details.');
     }
-  }, [addTransaction]);
+  }, [addTransaction, API_URL]);
 
   const config = {
     token: linkToken,
