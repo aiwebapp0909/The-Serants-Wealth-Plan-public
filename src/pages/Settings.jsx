@@ -177,7 +177,7 @@ function PreferencesTab() {
   return (
     <div className="bg-surface-container border border-outline-variant rounded-2xl p-6 space-y-5">
       <h3 className="font-headline font-bold text-on-surface text-lg mb-2">Preferences</h3>
-      
+
       {[
         { label: 'Dark Mode', desc: 'Use dark theme throughout the app', value: darkMode, set: setDarkMode },
         { label: 'Push Notifications', desc: 'Get budget alerts and goal reminders', value: notifications, set: setNotifications },
@@ -257,11 +257,10 @@ export default function Settings() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-body font-medium whitespace-nowrap transition-all ${
-                  activeTab === tab.id
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-body font-medium whitespace-nowrap transition-all ${activeTab === tab.id
                     ? 'bg-primary text-background'
                     : 'text-gray-400 hover:text-on-surface hover:bg-surface-container'
-                }`}
+                  }`}
               >
                 <span className="material-symbols-outlined text-lg">{tab.icon}</span>
                 {tab.label}
